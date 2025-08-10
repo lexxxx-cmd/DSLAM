@@ -34,7 +34,7 @@
 #include <mutex>
 #include <chrono>
 
-
+#include "Common.hpp"
 
 using namespace std;
 
@@ -1522,195 +1522,10 @@ Sophus::SE3f Tracking::GrabImageStereo(const cv::Mat &imRectLeft, const cv::Mat 
     return mCurrentFrame.GetPose();
 }
 
-void Tracking::ProcessMovingObject(const cv::Mat &imgray ){
-    // Clear the previous data
-	F_prepoint.clear();
-	F_nextpoint.clear();
-	F2_prepoint.clear();
-	F2_nextpoint.clear();
-	T_M.clear();
-    // 清空prepoint和nextpoint
-    prepoint.clear();
-    nextpoint.clear();
-    // 从上一帧拿关键点
-    std::cout << "mLastFrame.mvpMapPoints.size() = " << mCurrentFrame.mvpMapPoints.size() << std::endl;
-    if(!mCurrentFrame.mvpMapPoints.empty()) {
-        
-        for (int i=0; i < mCurrentFrame.mvpMapPoints.size(); ++i)
-        {
-            if (mCurrentFrame.mvpMapPoints[i] && mCurrentFrame.mvpMapPoints[i]->Observations()>=1)
-            {   
-                prepoint.push_back(mCurrentFrame.mvKeysUn[i].pt); // Convert cv::KeyPoint to cv::Point2f
-            }
-        }
-    }else {
-        
-    }
-    // Detect dynamic target and ultimately optput the T matrix
-    //cv::goodFeaturesToTrack(mImGrayPre, prepoint, 1000, 0.02, 5, cv::Mat(), 5, true, 0.04);
-    //cv::cornerSubPix(mImGrayPre, prepoint, cv::Size(5, 5), cv::Size(-1, -1), cv::TermCriteria(cv::TermCriteria::MAX_ITER | cv::TermCriteria::EPS, 15, 0.03));
-	cv::calcOpticalFlowPyrLK(mImGrayPre, imgray, prepoint, nextpoint, state, err, cv::Size(15, 15), 5, cv::TermCriteria(cv::TermCriteria::MAX_ITER | cv::TermCriteria::EPS, 15, 0.01));
-    int dx[10] = { -1, 0, 1, -1, 0, 1, -1, 0, 1 };
-    int dy[10] = { -1, -1, -1, 0, 0, 0, 1, 1, 1 };
-	for (int i = 0; i < state.size(); i++)
-    {
-        if(state[i] != 0)
-        {
-            
-            int x1 = prepoint[i].x, y1 = prepoint[i].y;
-            int x2 = nextpoint[i].x, y2 = nextpoint[i].y;
-            if ((x1 < limit_edge_corner || x1 >= imgray.cols - limit_edge_corner || x2 < limit_edge_corner || x2 >= imgray.cols - limit_edge_corner
-            || y1 < limit_edge_corner || y1 >= imgray.rows - limit_edge_corner || y2 < limit_edge_corner || y2 >= imgray.rows - limit_edge_corner))
-            {
-                state[i] = 0;
-                continue;
-            }
-            double sum_check = 0;
-            for (int j = 0; j < 9; j++)
-                sum_check += abs(mImGrayPre.at<uchar>(y1 + dy[j], x1 + dx[j]) - imgray.at<uchar>(y2 + dy[j], x2 + dx[j]));
-            if (sum_check > limit_of_check) state[i] = 0;
-            if (state[i])
-            {
-                F_prepoint.push_back(prepoint[i]);
-                F_nextpoint.push_back(nextpoint[i]);
-                
-            }
-        }
-    }
-    // F-Matrix
-    cv::Mat mask = cv::Mat(cv::Size(1, F_prepoint.size()), CV_8UC1);
-    cv::Mat F = cv::findFundamentalMat(F_prepoint, F_nextpoint, mask, cv::FM_RANSAC, 0.1, 0.99);
-    mpORBextractorLeft->F = F;
-    //找高质量静态点
-    
-    std::vector<cv::Point2f> T_M_static;
-    for (int i = 0; i < mask.rows; i++)
-    {
-        if (mask.at<uchar>(i, 0) == 0);
-        else
-        {
-            // Circle(pre_frame, F_prepoint[i], 6, Scalar(255, 255, 0), 3);
-            double A = F.at<double>(0, 0)*F_prepoint[i].x + F.at<double>(0, 1)*F_prepoint[i].y + F.at<double>(0, 2);
-            double B = F.at<double>(1, 0)*F_prepoint[i].x + F.at<double>(1, 1)*F_prepoint[i].y + F.at<double>(1, 2);
-            double C = F.at<double>(2, 0)*F_prepoint[i].x + F.at<double>(2, 1)*F_prepoint[i].y + F.at<double>(2, 2);
-            double dd = fabs(A*F_nextpoint[i].x + B*F_nextpoint[i].y + C) / sqrt(A*A + B*B); //Epipolar constraints
-            if (dd <= 0.1)
-            {
-                //T_M_static.push_back(F_nextpoint[i]);
-                F2_prepoint.push_back(F_prepoint[i]);
-                F2_nextpoint.push_back(F_nextpoint[i]);
-            }
-        }
-    }
-    F_prepoint = F2_prepoint;
-    F_nextpoint = F2_nextpoint;
-    //用高质量静态点来找动态点
-    cv::Mat LKMask = cv::Mat::zeros(imgray.rows,imgray.cols, CV_8UC1);
-    for (int i = 0; i < prepoint.size(); i++)
-    {
-        if (state[i] != 0)
-        {
-            double A = F.at<double>(0, 0)*prepoint[i].x + F.at<double>(0, 1)*prepoint[i].y + F.at<double>(0, 2);
-            double B = F.at<double>(1, 0)*prepoint[i].x + F.at<double>(1, 1)*prepoint[i].y + F.at<double>(1, 2);
-            double C = F.at<double>(2, 0)*prepoint[i].x + F.at<double>(2, 1)*prepoint[i].y + F.at<double>(2, 2);
-            double dd = fabs(A*nextpoint[i].x + B*nextpoint[i].y + C) / sqrt(A*A + B*B);
-        
-            // Judge outliers
-            if (dd <= 0.05) {
-                continue;
-            }
-            //判断为动态点，在mask对应区域3*3标为1；
-            for (int j = 0; j < 9; j++)
-                LKMask.at<uchar>(nextpoint[i].y + dy[j], nextpoint[i].x + dx[j]) = 1;
 
-        }
-    }
-    mpORBextractorLeft->mLKMask = LKMask;
-    /*
-    //cv::imwrite("/mnt/workspace/YOLO_ORB_SLAM3/res/LKMask.png", LKMask);
-    cv::Mat imgWithMask;
-    cv::Mat imgray_color;
-    cv::cvtColor(imgray, imgray_color, cv::COLOR_GRAY2BGR);
-    cv::Mat colorMask = cv::Mat::zeros(LKMask.size(), CV_8UC3);
-    // 将掩码区域设置为半透明的红色
-    colorMask.setTo(cv::Scalar(0, 0, 255), LKMask);  // BGR格式，设置为红色
-
-    // 混合原图和掩码
-    cv::addWeighted(imgray_color, 0.7, colorMask, 0.3, 0, imgWithMask);
-    cv::imwrite("/mnt/workspace/YOLO_ORB_SLAM3/res/LKMask.png", imgWithMask);
-    */
-    //mask
-    //mpORBextractorLeft->pointMask = pointMask;
-    
-}
-cv::Mat Tracking::getStaticMaskFromLF() {
-    cv::Mat SMask = cv::Mat::zeros(mImGray.size(), CV_8UC1);
-    if(!mCurrentFrame.mvKeys.empty()){
-        std::cout << "mLastFrame.mvKeys.size() = " << mCurrentFrame.mvKeys.size() << std::endl;
-        std::cout << "mLastFrame.mvKeys.size() = " << mCurrentFrame.mvKeysUn.size() << std::endl;
-    
-        int dx[10] = { -1, 0, 1, -1, 0, 1, -1, 0, 1 };
-        int dy[10] = { -1, -1, -1, 0, 0, 0, 1, 1, 1 };
-        for(auto kp : mCurrentFrame.mvKeys) {
-            for (int i = 0; i < 9; i++) {
-                SMask.at<uchar>(kp.pt.y + dy[i], kp.pt.x + dx[i]) = 1;
-            }
-        }
-    }
-
-    return SMask;
-
-}
-void Tracking::DirectmethodMultiLayer(const cv::Mat& preImg,const cv::Mat& curImg){
-    // parameters
-    KeyFrame* pRef = mCurrentFrame.mpReferenceKF;
-    // ref_keyframe 到 lastframe的位姿变换
-    Sophus::SE3f Tlr = mlRelativeFramePoses.back();
-    Sophus::SE3<float> T21 = Tlr * pRef->GetPose();
-    //Sophus::SE3<float> T21 = Sophus::SE3<float>(); 
-    /*
-    int pyramids = 1;
-    std::vector<float> ScaleFactors = mCurrentFrame.mvScaleFactors;
-    std::vector<cv::Mat> ImagePyramids = mCurrentFrame.mpORBextractorLeft->mvImagePyramid;
-
-    std::vector<cv::Mat> pyr2;
-    pyr2.reserve(pyramids);
-    for (int i = 0; i < pyramids; i++) {
-        float scale = mCurrentFrame.mvInvScaleFactors[i];
-        if (i == 0) {
-            pyr2.push_back(curImg);
-        } else {
-            cv::Mat img2_pyr;
-            cv::resize(pyr2[i - 1], img2_pyr,
-                       cv::Size(pyr2[i - 1].cols * scale, pyr2[i - 1].rows * scale));
-            pyr2.push_back(img2_pyr);
-        }
-    }
-    for(int i = pyramids-1; i >=0 ; i--){
-        float scale = mCurrentFrame.mvInvScaleFactors[i];
-        int n = Optimizer::DirectmethodSingularLayer(mCurrentFrame, ImagePyramids[i], pyr2[i], T21, scale);
-    }
-    */
-    float scale = 1.0;
-    int n = Optimizer::DirectmethodSingularLayer(mCurrentFrame, preImg, curImg, T21, scale);
-
-    //拿到优化后位姿后
-    cv::Mat tmp = curImg.clone();
-    cv::Mat rgb;
-    cv::cvtColor(tmp, rgb, cv::COLOR_GRAY2BGR);
-    std::cout << "3dnums:"  << mCurrentFrame.mvKeys3D.size() << std::endl;
-    for(auto pt3d : mCurrentFrame.mvKeys3D) {
-        Eigen::Vector3f pt3d_now = T21 * pt3d;
-        Eigen::Vector2f pt2d_uv_now = mCurrentFrame.mpCamera->project(pt3d_now);
-        cv::Point pt(pt2d_uv_now(0), pt2d_uv_now(1));
-        if ( pt.x<0 || pt.x>=640 || pt.y<0 || pt.y>=480  )
-            continue;
-        cv::circle(rgb, pt, 3, cv::Scalar(0, 0, 255), -1);
-    }
-    cv::imwrite("/mnt/workspace/YOLO_ORB_SLAM3/res/directPredictkp.png", rgb);
-}
 Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const double &timestamp, string filename)
 {
+    
     mImGray = imRGB;
     cv::Mat imDepth = imD;
     mpORBextractorLeft->mDepth = imD;
@@ -1741,31 +1556,33 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
         if(mpORBextractorLeft->mvMaskWindow.size() > 3) {
             mpORBextractorLeft->mvMaskWindow.pop();
         }
+        /*
         cv::Mat tmpMask = getStaticMaskFromLF();
         mpORBextractorLeft->mvStaticMaskWindows.push(tmpMask);
         if(mpORBextractorLeft->mvStaticMaskWindows.size() > 2) {
                 mpORBextractorLeft->mvStaticMaskWindows.pop();
         }
+        */
 
         
-        cv::Mat imgWithMask;
-        cv::Mat colorMask = cv::Mat::zeros(mpDetector->mMask.size(), CV_8UC3);
-        cv::Mat colorSMask = cv::Mat::zeros(mpDetector->mMask.size(), CV_8UC3);
-        //std::cout << mpDetector->mMask.size() << std::endl;
-        // 将掩码区域设置为半透明的红色
+        // cv::Mat imgWithMask;
+        // cv::Mat colorMask = cv::Mat::zeros(mpDetector->mMask.size(), CV_8UC3);
+        // cv::Mat colorSMask = cv::Mat::zeros(mpDetector->mMask.size(), CV_8UC3);
+        // //std::cout << mpDetector->mMask.size() << std::endl;
+        // // 将掩码区域设置为半透明的红色
         
-        colorMask.setTo(cv::Scalar(0, 0, 255), mpDetector->mMask);  // BGR格式，设置为红色
-        colorSMask.setTo(cv::Scalar(0, 255, 0), mpORBextractorLeft->mvStaticMaskWindows.back());  // BGR格式，设置为红色
+        // colorMask.setTo(cv::Scalar(0, 0, 255), mpDetector->mMask);  // BGR格式，设置为红色
+        // //colorSMask.setTo(cv::Scalar(0, 255, 0), mpORBextractorLeft->mvStaticMaskWindows.back());  // BGR格式，设置为红色
 
-        // 混合原图和掩码
-        cv::addWeighted(InputImage, 0.5, colorMask, 0.5, 0, imgWithMask);
-        cv::Mat imgWithSMask;
-        cv::addWeighted(imgWithMask, 0.5, colorSMask, 0.5, 0, imgWithSMask);
-        for(auto area : mpDetector->mvDynamicArea){
-            cv::rectangle(imgWithSMask, area, cv::Scalar(0, 255, 0), 2);
-        }
+        // // 混合原图和掩码
+        // cv::addWeighted(InputImage, 0.5, colorMask, 0.5, 0, imgWithMask);
+        // cv::Mat imgWithSMask;
+        // cv::addWeighted(imgWithMask, 0.5, colorSMask, 0.5, 0, imgWithSMask);
+        // for(auto area : mpDetector->mvDynamicArea){
+        //     cv::rectangle(imgWithSMask, area, cv::Scalar(0, 255, 0), 2);
+        // }
 
-        cv::imwrite("/mnt/workspace/YOLO_ORB_SLAM3/res/dmask.png", imgWithSMask);
+        // cv::imwrite("/mnt/workspace/YOLO_ORB_SLAM3/res/dmask.png", imgWithSMask);
         
         if(mpViewer){
             std::unique_lock<std::mutex> lock(mpViewer->mMutexPAFinsh);
@@ -1795,10 +1612,18 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
     //光流跟踪一致性
      
     //std::cout << "mLastFrame.mvpMapPoints.size() = " << mCurrentFrame.mvpMapPoints.size() << std::endl; 
-    if(mImGrayPre.data)
+    if(!mImGrayPre.empty() && !mImGray.empty() && mImGrayPre.size() == mImGray.size())
     {
-        //ProcessMovingObject(imGrayT);
-        DirectmethodMultiLayer(mImGrayPre,mImGray);
+        cv::Mat motionMask = cv::Mat::zeros(mImGrayPre.size(), CV_8UC1);
+        std::cout << "Calculating motion mask..." << std::endl;
+        // 调用静态函数，使用默认阈值5.0
+        OpticalFlowUtils::calculateMotionMask(mImGrayPre, mImGray, motionMask);
+        std::cout << "Calculation finished." << std::endl;
+        
+        if (!motionMask.empty()) {
+            mpORBextractorLeft->mLKMask = motionMask.clone();
+            cv::imwrite("./motion_mask.png", motionMask);
+        }
     }
     
     if (mSensor == System::RGBD)

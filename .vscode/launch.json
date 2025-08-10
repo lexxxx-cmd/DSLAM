@@ -14,7 +14,7 @@
             "/home/data/TUM/rgbd_dataset_freiburg3_walking_xyz",
             "/home/data/TUM/rgbd_dataset_freiburg3_walking_xyz/associations.txt",
             "TrajSave/tum/walking_xyz/old"],
-            "stopAtEntry": true,
+            "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
             "environment": [],
             "MIMode": "gdb",

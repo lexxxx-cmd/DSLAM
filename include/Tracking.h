@@ -81,10 +81,7 @@ public:
 
     void GrabImuData(const IMU::Point &imuMeasurement);
 
-    //处理光流追踪
-    void ProcessMovingObject(const cv::Mat &imgray );
-    cv::Mat getStaticMaskFromLF();
-    void DirectmethodMultiLayer(const cv::Mat& preImg,const cv::Mat& curImg);
+
     void SetLocalMapper(LocalMapping* pLocalMapper);
     void SetLoopClosing(LoopClosing* pLoopClosing);
     void SetViewer(Viewer* pViewer);

@@ -130,7 +130,8 @@ add_library(${PROJECT_NAME} SHARED
         include/Settings.h
         include/BaseDetector.h
         include/DetectorFactory.hpp
-        include/YRTDETRDetector.h)
+        include/YRTDETRDetector.h
+        include/Common.hpp)
 
 add_subdirectory(Thirdparty/g2o)
 
