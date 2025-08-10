@@ -13,32 +13,34 @@ public:
      * 
      * @param prevFrame 前一帧的灰度图 (CV_8UC1)。
      * @param nextFrame 后一帧的灰度图 (CV_8UC1)。
-     * @param mask      输出掩码 (CV_8UC1)。函数将在此掩码上将运动幅度大于阈值的点设置为255。
-     *                  该掩码在传入前应被正确初始化（例如，全黑）。
      * @param magnitudeThreshold 幅度阈值。光流向量的长度超过此值时，才被认为是显著运动。
      */
-    static void calculateMotionMask(const cv::Mat& prevFrame, const cv::Mat& nextFrame, cv::Mat& mask, double magnitudeThreshold = 5.0) {
+    static void calculateMotionMask(const cv::Mat& prevFrame, const cv::Mat& nextFrame, double magnitudeThreshold = 5.0) {
+        mask = cv::Mat::zeros(prevFrame.size(), CV_8UC1);
         // --- 1. 输入验证 ---
         // 确保输入图像非空
         if (prevFrame.empty() || nextFrame.empty()) {
             std::cerr << "Error: Input frames cannot be empty." << std::endl;
+            isReliable = false;
             return;
         }
         // 确保图像尺寸相同
         if (prevFrame.size() != nextFrame.size()) {
             std::cerr << "Error: Input frames must have the same size." << std::endl;
+            isReliable = false;
             return;
         }
         // 确保图像为单通道8位灰度图
         if (prevFrame.type() != CV_8UC1 || nextFrame.type() != CV_8UC1) {
             std::cerr << "Error: Input frames must be of type CV_8UC1 (grayscale)." << std::endl;
+            isReliable = false;
             return;
         }
         // 确保掩码与图像尺寸相同且类型正确
         if (mask.size() != prevFrame.size() || mask.type() != CV_8UC1) {
             std::cerr << "Error: Mask must have the same size as frames and be of type CV_8UC1." << std::endl;
             // 可以选择在这里自动创建/重置mask
-            // mask = cv::Mat::zeros(prevFrame.size(), CV_8UC1);
+            isReliable = false;
             return;
         }
 
@@ -59,7 +61,8 @@ public:
         // 1.2: poly_sigma, 高斯标准差，用于平滑导数
         // 0: flags
         cv::calcOpticalFlowFarneback(prevFrame, nextFrame, flow, 0.5, 3, 15, 3, 5, 1.2, 0);
-
+        int motionPixels = 0;
+        int totalPixels = flow.rows * flow.cols;
         // --- 3. 遍历光流场并更新Mask ---
         for (int y = 0; y < flow.rows; ++y) {
             for (int x = 0; x < flow.cols; ++x) {
@@ -74,8 +77,31 @@ public:
                 // 如果幅度大于阈值，则在mask上标记该点
                 if (magnitude > magnitudeThreshold) {
                     mask.at<uchar>(y, x) = 255;
+                    motionPixels++;
                 }
             }
         }
+        double motionRatio = static_cast<double>(motionPixels) / totalPixels;
+        isReliable = motionRatio <= 0.7;  // 显著运动区域不超过70%则认为可靠
+
+        if (!isReliable) {
+            // 如果不可靠，可以选择清空掩码或保持原样
+            mask.setTo(0);  // 根据需求决定是否注释掉这行
+            std::cerr << "Warning: Optical flow detection unreliable. Motion area: " 
+                      << motionRatio * 100 << "%" << std::endl;
+        }
     }
+    static bool isOFReliable() {
+        return isReliable;
+    }
+    static cv::Mat getMask() {
+        return mask;
+    }
+private:
+    static bool isReliable;
+    static cv::Mat mask;
+
 };
+
+bool OpticalFlowUtils::isReliable = false;
+cv::Mat OpticalFlowUtils::mask = cv::Mat();

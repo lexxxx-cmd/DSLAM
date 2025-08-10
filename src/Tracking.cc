@@ -1614,15 +1614,14 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
     //std::cout << "mLastFrame.mvpMapPoints.size() = " << mCurrentFrame.mvpMapPoints.size() << std::endl; 
     if(!mImGrayPre.empty() && !mImGray.empty() && mImGrayPre.size() == mImGray.size())
     {
-        cv::Mat motionMask = cv::Mat::zeros(mImGrayPre.size(), CV_8UC1);
+        //cv::Mat motionMask = cv::Mat::zeros(mImGrayPre.size(), CV_8UC1);
         std::cout << "Calculating motion mask..." << std::endl;
         // 调用静态函数，使用默认阈值5.0
-        OpticalFlowUtils::calculateMotionMask(mImGrayPre, mImGray, motionMask);
+        OpticalFlowUtils::calculateMotionMask(mImGrayPre, mImGray);
         std::cout << "Calculation finished." << std::endl;
-        
-        if (!motionMask.empty()) {
-            mpORBextractorLeft->mLKMask = motionMask.clone();
-            cv::imwrite("./motion_mask.png", motionMask);
+        mpORBextractorLeft->mLKMask = OpticalFlowUtils::getMask();
+        if (OpticalFlowUtils::isOFReliable()) {
+            cv::imwrite("./motion_mask.png", OpticalFlowUtils::getMask());
         }
     }
     
