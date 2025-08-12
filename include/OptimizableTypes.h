@@ -28,6 +28,37 @@
 
 
 namespace ORB_SLAM3 {
+class  EdgeStereoSE3ProjectXYZOnlyPose: public  g2o::BaseUnaryEdge<3, Eigen::Vector3d, g2o::VertexSE3Expmap>{
+public:
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
+  EdgeStereoSE3ProjectXYZOnlyPose(float w) : weight(w){}
+
+  bool read(std::istream& is);
+
+  bool write(std::ostream& os) const;
+
+  void computeError()  {
+    const g2o::VertexSE3Expmap* v1 = static_cast<const g2o::VertexSE3Expmap*>(_vertices[0]);
+    Eigen::Vector3d obs(_measurement);
+    _error = weight * (obs - cam_project(v1->estimate().map(Xw)));
+  }
+
+  bool isDepthPositive() {
+    const g2o::VertexSE3Expmap* v1 = static_cast<const g2o::VertexSE3Expmap*>(_vertices[0]);
+    return (v1->estimate().map(Xw))(2)>0.0;
+  }
+
+
+  virtual void linearizeOplus();
+
+  Eigen::Vector3d cam_project(const Eigen::Vector3d & trans_xyz) const;
+
+  Eigen::Vector3d Xw;
+  double fx, fy, cx, cy, bf;
+  float weight;
+};
+
 class  EdgeSE3ProjectXYZOnlyPose: public  g2o::BaseUnaryEdge<2, Eigen::Vector2d, g2o::VertexSE3Expmap>{
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW

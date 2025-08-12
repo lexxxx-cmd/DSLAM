@@ -120,6 +120,7 @@ protected:
     //bool hasNearbyDynamicPoints(const cv::Point2f& pt);
     bool inDynamicMask(const cv::Point2f& pt);
     bool inDynamicLKMask(const cv::Point2f& pt);
+    bool inSPMat(const cv::Point2f& pt);
     std::vector<cv::Point> pattern;
 
     int nfeatures;

@@ -5,11 +5,11 @@ sequences=(
     "walking_xyz"
     "walking_rpy"
     "walking_static"
-    "walking_half"
+    "walking_halfsphere"
     "sitting_xyz"
     "sitting_rpy"
     "sitting_static"
-    "sitting_half"
+    "sitting_halfsphere"
 )
 
 # 基础路径设置

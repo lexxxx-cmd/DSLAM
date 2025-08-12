@@ -868,6 +868,11 @@ namespace ORB_SLAM3
                         {
                             for (auto vit_area = mvDynamicArea.begin(); vit_area != mvDynamicArea.end(); vit_area++)
                             {
+                                // 框的宽高比差太大也全删
+                                if(allDelete == false) {
+                                    const float aspect = static_cast<float>(vit_area->height / vit_area->width);
+                                    allDelete = (aspect < 1.0/2.8) || (aspect > 2.8);
+                                }
                                 Find = false;
                                 if (vit_area->contains(vit_kp->pt))
                                 {
@@ -878,9 +883,18 @@ namespace ORB_SLAM3
                                         break;
                                     }
                                     else if(inDynamicMask(vit_kp->pt) || mDepth.at<uchar>(vit_kp->pt.y, vit_kp->pt.x) <= 0){
-                                        Find = true;
-                                        vit_kp = vToDistributeKeys.erase(vit_kp);
-                                        break;
+                                        // 光流拉一下
+                                        if(OpticalFlowUtils::isOFReliable()) {
+                                            if(inDynamicLKMask(vit_kp->pt)) {
+                                                Find = true;
+                                                vit_kp = vToDistributeKeys.erase(vit_kp);
+                                                break;
+                                            }
+                                        }else {
+                                            Find = true;
+                                            vit_kp = vToDistributeKeys.erase(vit_kp);
+                                            break;
+                                        }
                                     }
                                     
                                 }
@@ -892,26 +906,22 @@ namespace ORB_SLAM3
                                 Find = false;
                             }
                         }
-                    }
-                    /*
-                    else if(!mLKMask.empty()) {
+                    }else {
                         bool Find = false;
                         for (auto vit_kp = vToDistributeKeys.begin(); vit_kp != vToDistributeKeys.end();)
-                        {  
-                            Find = false;
-                                //再加一个判断：关键点周围有没有动态点，点集为成员变量mT_M
-                            if(inDynamicLKMask(vit_kp->pt)){
+                        {
+                            if(!inSPMat(vit_kp->pt)) {
                                 Find = true;
                                 vit_kp = vToDistributeKeys.erase(vit_kp);
-                            }      
-                            
+                                break;
+                            }
                             if (!Find)
                             {
                                 ++vit_kp;
                                 Find = false;
                             }
                         }
-                    }*/
+                    }
                     float scale_inverse = 1 / scale;
                     for (auto vit = vToDistributeKeys.begin(); vit != vToDistributeKeys.end(); vit++)
                     {
@@ -1248,8 +1258,8 @@ namespace ORB_SLAM3
             mvLastImagePyramid[i] = mvImagePyramid[i].clone();
         }
         //cout << "[ORBextractor]: extracted " << _keypoints.size() << " KeyPoints" << endl;
-        cv::imwrite("/home/lyl/YOLO_ORB_SLAM3/res/kps.png", rgb);
-        StaticProbabilityGrid::saveVisualization("/home/lyl/YOLO_ORB_SLAM3/res/spMat.png");
+        //cv::imwrite("/home/lyl/YOLO_ORB_SLAM3/res/kps.png", rgb);
+        //StaticProbabilityGrid::saveVisualization("/home/lyl/YOLO_ORB_SLAM3/res/spMat.png");
         return monoIndex;
     }
     //感觉还能加一个上一帧辅助判断
@@ -1294,10 +1304,11 @@ namespace ORB_SLAM3
         
     }
     bool ORBextractor::inDynamicLKMask(const cv::Point2f& pt) {
+        cv::Mat& mask = OpticalFlowUtils::getMask();
         int expandision = 3;
         for (int i = -expandision; i <= expandision; i++) {
             for (int j = -expandision; j <= expandision; j++) {
-                if (mLKMask.at<uchar>(pt.y + i, pt.x + j) == 255) {
+                if (mask.at<uchar>(pt.y + i, pt.x + j) == 255) {
                     return true;
                     break;
                 }
@@ -1305,5 +1316,11 @@ namespace ORB_SLAM3
         }
         return false;
         
+    }
+    bool ORBextractor::inSPMat(const cv::Point2f& pt) {
+        Eigen::Matrix<float, 12, 16> prob_grid = StaticProbabilityGrid::getProbabilityGrid();
+        const int i = static_cast<int>(pt.y / 40);
+        const int j = static_cast<int>(pt.x / 40);
+        return prob_grid(i,j) > 0.5; 
     }
 } //namespace ORB_SLAM

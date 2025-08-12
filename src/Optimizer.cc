@@ -844,7 +844,7 @@ int Optimizer::PoseOptimization(Frame *pFrame)
     vnIndexEdgeMono.reserve(N);
     vnIndexEdgeRight.reserve(N);
 
-    vector<g2o::EdgeStereoSE3ProjectXYZOnlyPose*> vpEdgesStereo;
+    vector<ORB_SLAM3::EdgeStereoSE3ProjectXYZOnlyPose*> vpEdgesStereo;
     vector<size_t> vnIndexEdgeStereo;
     vpEdgesStereo.reserve(N);
     vnIndexEdgeStereo.reserve(N);
@@ -900,8 +900,10 @@ int Optimizer::PoseOptimization(Frame *pFrame)
                     const cv::KeyPoint &kpUn = pFrame->mvKeysUn[i];
                     const float &kp_ur = pFrame->mvuRight[i];
                     obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
-
-                    g2o::EdgeStereoSE3ProjectXYZOnlyPose* e = new g2o::EdgeStereoSE3ProjectXYZOnlyPose();
+                    // 获取概率
+                    float w = pFrame->prob_map(static_cast<int>(kpUn.pt.y/40), static_cast<int>(kpUn.pt.x/40));
+                    w = (w > 0.5) ? (w/0.5) : 1;
+                    ORB_SLAM3::EdgeStereoSE3ProjectXYZOnlyPose* e = new ORB_SLAM3::EdgeStereoSE3ProjectXYZOnlyPose(w);
 
                     e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(0)));
                     e->setMeasurement(obs);
@@ -1072,7 +1074,8 @@ int Optimizer::PoseOptimization(Frame *pFrame)
 
         for(size_t i=0, iend=vpEdgesStereo.size(); i<iend; i++)
         {
-            g2o::EdgeStereoSE3ProjectXYZOnlyPose* e = vpEdgesStereo[i];
+
+            ORB_SLAM3::EdgeStereoSE3ProjectXYZOnlyPose* e = vpEdgesStereo[i];
 
             const size_t idx = vnIndexEdgeStereo[i];
 
