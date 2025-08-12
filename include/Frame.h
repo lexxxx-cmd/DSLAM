@@ -304,6 +304,8 @@ public:
     double mTimeStereoMatch;
 #endif
 
+    Eigen::Matrix<float, 12, 16> prob_map;
+
 private:
 
     // Undistort keypoints given OpenCV distortion parameters.

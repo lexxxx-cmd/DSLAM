@@ -60,7 +60,7 @@
 #include <iostream>
 
 #include "ORBextractor.h"
-
+#include "Common.hpp"
 
 using namespace cv;
 using namespace std;
@@ -893,6 +893,7 @@ namespace ORB_SLAM3
                             }
                         }
                     }
+                    /*
                     else if(!mLKMask.empty()) {
                         bool Find = false;
                         for (auto vit_kp = vToDistributeKeys.begin(); vit_kp != vToDistributeKeys.end();)
@@ -910,7 +911,7 @@ namespace ORB_SLAM3
                                 Find = false;
                             }
                         }
-                    }
+                    }*/
                     float scale_inverse = 1 / scale;
                     for (auto vit = vToDistributeKeys.begin(); vit != vToDistributeKeys.end(); vit++)
                     {
@@ -1194,6 +1195,7 @@ namespace ORB_SLAM3
         cv::Mat tmp = image.clone();
         cv::Mat rgb;
         cv::cvtColor(tmp, rgb, cv::COLOR_GRAY2BGR);
+        Eigen::Matrix<float, 12, 16> observation_matrix = Eigen::Matrix<float, 12, 16>::Zero();
         for (int level = 0; level < nlevels; ++level)
         {
             vector<KeyPoint>& keypoints = allKeypoints[level];
@@ -1235,14 +1237,19 @@ namespace ORB_SLAM3
                     monoIndex++;
                 }
                 i++;
+                const int i = keypoint->pt.y / 40;
+                const int j = keypoint->pt.x / 40;
+                observation_matrix(i, j) = 1;
                 cv::circle(rgb, keypoint->pt, 3, cv::Scalar(0, 0, 255), -1);
             }
         }
+        StaticProbabilityGrid::update(observation_matrix);
         for(size_t i = 0; i < mvImagePyramid.size(); i++) {
             mvLastImagePyramid[i] = mvImagePyramid[i].clone();
         }
         //cout << "[ORBextractor]: extracted " << _keypoints.size() << " KeyPoints" << endl;
-        cv::imwrite("/mnt/workspace/YOLO_ORB_SLAM3/res/kps.png", rgb);
+        cv::imwrite("/home/lyl/YOLO_ORB_SLAM3/res/kps.png", rgb);
+        StaticProbabilityGrid::saveVisualization("/home/lyl/YOLO_ORB_SLAM3/res/spMat.png");
         return monoIndex;
     }
     //感觉还能加一个上一帧辅助判断

@@ -1630,7 +1630,7 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
     else if(mSensor == System::IMU_RGBD)
         mCurrentFrame = Frame(mImGray,imDepth,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,mpCamera,&mLastFrame,*mpImuCalib);
 
-
+    mCurrentFrame.prob_map = StaticProbabilityGrid::getProbabilityGrid();
     mCurrentFrame.mvKeys3D.clear();
     for(int i=0; i<mCurrentFrame.N; i++)
     {
@@ -3436,6 +3436,7 @@ void Tracking::CreateNewKeyFrame()
 
     mnLastKeyFrameId = mCurrentFrame.mnId;
     mpLastKeyFrame = pKF;
+    StaticProbabilityGrid::reset();
 }
 
 void Tracking::SearchLocalPoints()

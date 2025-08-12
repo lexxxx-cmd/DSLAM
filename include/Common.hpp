@@ -1,13 +1,20 @@
+#ifndef COMMON_H
+#define COMMON_H
 #include <iostream>
 #include <opencv2/opencv.hpp>
 #include <opencv2/video/tracking.hpp> // 包含光流函数
 #include <vector>
+#include <Eigen/Dense>
+#include <cmath>
 
 /**
  * @brief 包含光流计算相关静态工具函数的类
  */
 class OpticalFlowUtils {
 public:
+    OpticalFlowUtils(const OpticalFlowUtils&) = delete;
+    void operator=(const OpticalFlowUtils&) = delete;
+
     /**
      * @brief 计算两张灰度图之间的稠密光流，并根据运动幅度生成一个掩码。
      * 
@@ -16,9 +23,11 @@ public:
      * @param magnitudeThreshold 幅度阈值。光流向量的长度超过此值时，才被认为是显著运动。
      */
     static void calculateMotionMask(const cv::Mat& prevFrame, const cv::Mat& nextFrame, double magnitudeThreshold = 5.0) {
+        auto& mask = getMask();
         mask = cv::Mat::zeros(prevFrame.size(), CV_8UC1);
         // --- 1. 输入验证 ---
         // 确保输入图像非空
+        auto& isReliable = isOFReliable();
         if (prevFrame.empty() || nextFrame.empty()) {
             std::cerr << "Error: Input frames cannot be empty." << std::endl;
             isReliable = false;
@@ -91,17 +100,153 @@ public:
                       << motionRatio * 100 << "%" << std::endl;
         }
     }
-    static bool isOFReliable() {
+    static bool& isOFReliable() {
+        static bool isReliable = false;
         return isReliable;
     }
-    static cv::Mat getMask() {
+    static cv::Mat& getMask() {
+        static cv::Mat mask = cv::Mat();
         return mask;
     }
 private:
-    static bool isReliable;
-    static cv::Mat mask;
+    OpticalFlowUtils() = default;
 
 };
 
-bool OpticalFlowUtils::isReliable = false;
-cv::Mat OpticalFlowUtils::mask = cv::Mat();
+
+
+/**
+ * @class StaticProbabilityGrid
+ * @brief 一个静态类，用于全局管理和更新一个静态概率网格。
+ *
+ * 此类被设计为“静态类”，意味着它的所有成员和函数都是静态的。
+ * 您不需要也无法创建它的实例。所有操作都通过类名直接调用，
+ * 例如：StaticProbabilityGrid::update(...);
+ *
+ * 这种设计确保了在整个应用程序中只有一个共享的概率网格实例，
+ * 非常适合在ORB-SLAM3中作为全局唯一的特征区域静态性指导。
+ */
+class StaticProbabilityGrid {
+public:
+    // 删除拷贝构造和赋值操作，确保该类不会被复制。
+    StaticProbabilityGrid(const StaticProbabilityGrid&) = delete;
+    void operator=(const StaticProbabilityGrid&) = delete;
+
+    // --- 公共接口 ---
+
+    // 定义网格的维度
+    static constexpr int GRID_ROWS = 12;
+    static constexpr int GRID_COLS = 16;
+
+    // 根据您文档中提供的置信度p计算对数几率更新值
+    // L = log(p / (1 - p))
+    static constexpr float LOG_ODDS_HIT = 0.84729786f;  // log(0.7 / 0.3)
+    static constexpr float LOG_ODDS_MISS = -0.40546511f; // log(0.4 / 0.6)
+
+    // 为防止数值溢出或漂移，设定对数几率的上下限
+    static constexpr float LOG_ODDS_MIN = -5.0f; // 对应概率约 0.0067
+    static constexpr float LOG_ODDS_MAX = 5.0f;  // 对应概率约 0.9933
+
+    /**
+     * @brief 重置整个网格，将所有单元的概率设置为0.5。
+     *
+     * 在对数几率空间中，这等价于将所有值设置为0。
+     * 由于是静态类，此操作将影响全局唯一的网格。
+     */
+    static void reset() {
+        getLogOddsGrid_Internal().setZero();
+    }
+
+    /**
+     * @brief 根据当前的观测结果更新全局的静态概率网格。
+     * @param observation_matrix 一个与网格同维度的Eigen::Matrix。
+     *                           矩阵中大于0的值表示在该单元格中成功提取了静态特征点（命中），
+     *                           等于0或负值表示未提取到（未命中）。
+     */
+    static void update(const Eigen::Matrix<float, GRID_ROWS, GRID_COLS>& observation_matrix) {
+        // 获取对内部静态网格的引用
+        auto& grid = getLogOddsGrid_Internal();
+        auto tmp = Eigen::Matrix<float, GRID_ROWS, GRID_COLS>::Ones(12, 16);
+        // 将更新值加到当前的对数几率网格上
+        grid += LOG_ODDS_HIT * observation_matrix;
+        grid += LOG_ODDS_MISS * (tmp-observation_matrix);
+
+        // 对更新后的值进行钳位，防止无限增长或减小
+        grid = grid.cwiseMax(LOG_ODDS_MIN).cwiseMin(LOG_ODDS_MAX);
+    }
+
+    /**
+     * @brief 获取当前表示为[0, 1]区间的概率矩阵。
+     * @return 一个Eigen::Matrix，其元素值为每个单元格是静态的概率。
+     *
+     * 该方法将内部存储的对数几率矩阵转换为标准概率。
+     * 转换公式为: p = 1 - 1 / (1 + exp(L))
+     */
+    static Eigen::Matrix<float, GRID_ROWS, GRID_COLS> getProbabilityGrid() {
+        // 获取对内部静态网格的常量引用
+        const auto& grid = getLogOddsGrid_Internal();
+
+        // 使用Eigen的向量化操作高效地完成转换
+        return 1.0f - (1.0f + grid.array().exp()).inverse();
+    }
+
+    static void saveVisualization(const std::string& filename) {
+        // 1. 获取概率矩阵
+        Eigen::Matrix<float, GRID_ROWS, GRID_COLS> prob_grid = getProbabilityGrid();
+
+        // 2. 定义输出图像尺寸并创建图像
+        const int img_height = 480;
+        const int img_width = 640;
+        cv::Mat visualization_image(img_height, img_width, CV_8UC1);
+
+        // 3. 遍历概率网格，填充图像
+        for (int r = 0; r < GRID_ROWS; ++r) {
+            for (int c = 0; c < GRID_COLS; ++c) {
+                // 根据概率值确定颜色 (0=黑, 255=白)
+                uchar color = (prob_grid(r, c) < 0.5f) ? 0 : 255;
+
+                // 计算此单元格在输出图像中对应的矩形区域
+                // 这种计算方式可以精确处理640/14不是整数的情况，确保填满整个图像
+                int y_start = r * img_height / GRID_ROWS;
+                int y_end = (r + 1) * img_height / GRID_ROWS;
+                int x_start = c * img_width / GRID_COLS;
+                int x_end = (c + 1) * img_width / GRID_COLS;
+
+                // 获取图像中的矩形区域(ROI)并用计算出的颜色填充
+                cv::Rect roi(x_start, y_start, x_end - x_start, y_end - y_start);
+                visualization_image(roi).setTo(color);
+            }
+        }
+
+        // 4. 保存图像
+        try {
+            if (!cv::imwrite(filename, visualization_image)) {
+                std::cerr << "Warning: Could not save visualization image to " << filename << std::endl;
+            }
+        } catch (const cv::Exception& ex) {
+            std::cerr << "Error: OpenCV exception while saving image: " << ex.what() << std::endl;
+        }
+    }
+private:
+    /**
+     * @brief 私有构造函数，防止外部创建此类的实例。
+     */
+    StaticProbabilityGrid() = default;
+
+    /**
+     * @brief 内部函数，用于获取唯一的、静态的网格实例。
+     * @return 对内部log-odds网格的引用。
+     *
+     * 这里使用了“函数内静态变量”（Meyers' Singleton）的设计模式。
+     * 这确保了log_odds_grid只被初始化一次，并且这种初始化在C++11及
+     * 以后的版本中是线程安全的。这是实现头文件-only静态类的最佳实践。
+     */
+    static Eigen::Matrix<float, GRID_ROWS, GRID_COLS>& getLogOddsGrid_Internal() {
+        // 静态变量在第一次调用此函数时被初始化为全零矩阵，之后调用都返回同一个实例的引用。
+        static Eigen::Matrix<float, GRID_ROWS, GRID_COLS> log_odds_grid = 
+            Eigen::Matrix<float, GRID_ROWS, GRID_COLS>::Zero();
+        return log_odds_grid;
+    }
+};
+
+#endif // COMMON_H
