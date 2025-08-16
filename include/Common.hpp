@@ -96,8 +96,8 @@ public:
         if (!isReliable) {
             // 如果不可靠，可以选择清空掩码或保持原样
             mask.setTo(0);  // 根据需求决定是否注释掉这行
-            std::cerr << "Warning: Optical flow detection unreliable. Motion area: " 
-                      << motionRatio * 100 << "%" << std::endl;
+            // std::cerr << "Warning: Optical flow detection unreliable. Motion area: " 
+            //           << motionRatio * 100 << "%" << std::endl;
         }
     }
     static bool& isOFReliable() {

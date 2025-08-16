@@ -1334,7 +1334,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
     vector<MapPoint*> vpMapPointEdgeBody;
     vpMapPointEdgeBody.reserve(nExpectedSize);
 
-    vector<g2o::EdgeStereoSE3ProjectXYZ*> vpEdgesStereo;
+    vector<ORB_SLAM3::EdgeStereoSE3ProjectXYZ*> vpEdgesStereo;
     vpEdgesStereo.reserve(nExpectedSize);
 
     vector<KeyFrame*> vpEdgeKFStereo;
@@ -1406,8 +1406,10 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
                     Eigen::Matrix<double,3,1> obs;
                     const float kp_ur = pKFi->mvuRight[get<0>(mit->second)];
                     obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
-
-                    g2o::EdgeStereoSE3ProjectXYZ* e = new g2o::EdgeStereoSE3ProjectXYZ();
+                    // 获取概率
+                    float w = pKFi->prob_map(static_cast<int>(kpUn.pt.y/40), static_cast<int>(kpUn.pt.x/40));
+                    w = (w > 0.5) ? (w/0.5) : 1;
+                    ORB_SLAM3::EdgeStereoSE3ProjectXYZ* e = new ORB_SLAM3::EdgeStereoSE3ProjectXYZ(w);
 
                     e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
                     e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId)));
@@ -1517,7 +1519,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
 
     for(size_t i=0, iend=vpEdgesStereo.size(); i<iend;i++)
     {
-        g2o::EdgeStereoSE3ProjectXYZ* e = vpEdgesStereo[i];
+        ORB_SLAM3::EdgeStereoSE3ProjectXYZ* e = vpEdgesStereo[i];
         MapPoint* pMP = vpMapPointEdgeStereo[i];
 
         if(pMP->isBad())
@@ -3679,7 +3681,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pMainKF,vector<KeyFrame*> vpAdju
     vector<MapPoint*> vpMapPointEdgeMono;
     vpMapPointEdgeMono.reserve(nExpectedSize);
 
-    vector<g2o::EdgeStereoSE3ProjectXYZ*> vpEdgesStereo;
+    vector<ORB_SLAM3::EdgeStereoSE3ProjectXYZ*> vpEdgesStereo;
     vpEdgesStereo.reserve(nExpectedSize);
 
     vector<KeyFrame*> vpEdgeKFStereo;
@@ -3756,8 +3758,10 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pMainKF,vector<KeyFrame*> vpAdju
                 Eigen::Matrix<double,3,1> obs;
                 const float kp_ur = pKF->mvuRight[get<0>(mit->second)];
                 obs << kpUn.pt.x, kpUn.pt.y, kp_ur;
-
-                g2o::EdgeStereoSE3ProjectXYZ* e = new g2o::EdgeStereoSE3ProjectXYZ();
+                // 获取概率
+                float w = pKF->prob_map(static_cast<int>(kpUn.pt.y/40), static_cast<int>(kpUn.pt.x/40));
+                w = (w > 0.5) ? (w/0.5) : 1;
+                ORB_SLAM3::EdgeStereoSE3ProjectXYZ* e = new ORB_SLAM3::EdgeStereoSE3ProjectXYZ(w);
 
                 e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(id)));
                 e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKF->mnId)));
@@ -3823,7 +3827,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pMainKF,vector<KeyFrame*> vpAdju
 
         for(size_t i=0, iend=vpEdgesStereo.size(); i<iend;i++)
         {
-            g2o::EdgeStereoSE3ProjectXYZ* e = vpEdgesStereo[i];
+            ORB_SLAM3::EdgeStereoSE3ProjectXYZ* e = vpEdgesStereo[i];
             MapPoint* pMP = vpMapPointEdgeStereo[i];
 
             if(pMP->isBad())
@@ -3872,7 +3876,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pMainKF,vector<KeyFrame*> vpAdju
 
     for(size_t i=0, iend=vpEdgesStereo.size(); i<iend;i++)
     {
-        g2o::EdgeStereoSE3ProjectXYZ* e = vpEdgesStereo[i];
+        ORB_SLAM3::EdgeStereoSE3ProjectXYZ* e = vpEdgesStereo[i];
         MapPoint* pMP = vpMapPointEdgeStereo[i];
 
         if(pMP->isBad())
@@ -3975,7 +3979,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pMainKF,vector<KeyFrame*> vpAdju
 
         for(size_t i=0, iend=vpEdgesStereo.size(); i<iend;i++)
         {
-            g2o::EdgeStereoSE3ProjectXYZ* e = vpEdgesStereo[i];
+            ORB_SLAM3::EdgeStereoSE3ProjectXYZ* e = vpEdgesStereo[i];
             MapPoint* pMP = vpMapPointEdgeStereo[i];
             KeyFrame* pKFedge = vpEdgeKFMono[i];
 

@@ -58,7 +58,37 @@ public:
   double fx, fy, cx, cy, bf;
   float weight;
 };
+class  EdgeStereoSE3ProjectXYZ: public  g2o::BaseBinaryEdge<3, Eigen::Vector3d, g2o::VertexSBAPointXYZ, g2o::VertexSE3Expmap>{
+public:
+  EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
+  EdgeStereoSE3ProjectXYZ(float w);
+
+  bool read(std::istream& is);
+
+  bool write(std::ostream& os) const;
+
+  void computeError()  {
+    const g2o::VertexSE3Expmap* v1 = static_cast<const g2o::VertexSE3Expmap*>(_vertices[1]);
+    const g2o::VertexSBAPointXYZ* v2 = static_cast<const g2o::VertexSBAPointXYZ*>(_vertices[0]);
+    Eigen::Vector3d obs(_measurement);
+    _error = weight * (obs - cam_project(v1->estimate().map(v2->estimate()),bf));
+  }
+
+  bool isDepthPositive() {
+    const g2o::VertexSE3Expmap* v1 = static_cast<const g2o::VertexSE3Expmap*>(_vertices[1]);
+    const g2o::VertexSBAPointXYZ* v2 = static_cast<const g2o::VertexSBAPointXYZ*>(_vertices[0]);
+    return (v1->estimate().map(v2->estimate()))(2)>0.0;
+  }
+
+
+  virtual void linearizeOplus();
+
+  Eigen::Vector3d cam_project(const Eigen::Vector3d & trans_xyz, const float &bf) const;
+
+  double fx, fy, cx, cy, bf;
+  float weight;
+};
 class  EdgeSE3ProjectXYZOnlyPose: public  g2o::BaseUnaryEdge<2, Eigen::Vector2d, g2o::VertexSE3Expmap>{
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW

@@ -869,10 +869,7 @@ namespace ORB_SLAM3
                             for (auto vit_area = mvDynamicArea.begin(); vit_area != mvDynamicArea.end(); vit_area++)
                             {
                                 // 框的宽高比差太大也全删
-                                if(allDelete == false) {
-                                    const float aspect = static_cast<float>(vit_area->height / vit_area->width);
-                                    allDelete = (aspect < 1.0/2.8) || (aspect > 2.8);
-                                }
+                                
                                 Find = false;
                                 if (vit_area->contains(vit_kp->pt))
                                 {
@@ -1258,8 +1255,8 @@ namespace ORB_SLAM3
             mvLastImagePyramid[i] = mvImagePyramid[i].clone();
         }
         //cout << "[ORBextractor]: extracted " << _keypoints.size() << " KeyPoints" << endl;
-        //cv::imwrite("/home/lyl/YOLO_ORB_SLAM3/res/kps.png", rgb);
-        //StaticProbabilityGrid::saveVisualization("/home/lyl/YOLO_ORB_SLAM3/res/spMat.png");
+        cv::imwrite("/home/lyl/YOLO_ORB_SLAM3/res/kps.png", rgb);
+        StaticProbabilityGrid::saveVisualization("/home/lyl/YOLO_ORB_SLAM3/res/spMat.png");
         return monoIndex;
     }
     //感觉还能加一个上一帧辅助判断

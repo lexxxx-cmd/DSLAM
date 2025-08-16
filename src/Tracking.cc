@@ -1565,24 +1565,24 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
         */
 
         
-        // cv::Mat imgWithMask;
-        // cv::Mat colorMask = cv::Mat::zeros(mpDetector->mMask.size(), CV_8UC3);
+        cv::Mat imgWithMask;
+        cv::Mat colorMask = cv::Mat::zeros(mpDetector->mMask.size(), CV_8UC3);
         // cv::Mat colorSMask = cv::Mat::zeros(mpDetector->mMask.size(), CV_8UC3);
         // //std::cout << mpDetector->mMask.size() << std::endl;
         // // 将掩码区域设置为半透明的红色
         
-        // colorMask.setTo(cv::Scalar(0, 0, 255), mpDetector->mMask);  // BGR格式，设置为红色
+        colorMask.setTo(cv::Scalar(0, 0, 255), mpDetector->mMask);  // BGR格式，设置为红色
         // //colorSMask.setTo(cv::Scalar(0, 255, 0), mpORBextractorLeft->mvStaticMaskWindows.back());  // BGR格式，设置为红色
 
         // // 混合原图和掩码
-        // cv::addWeighted(InputImage, 0.5, colorMask, 0.5, 0, imgWithMask);
+        cv::addWeighted(InputImage, 0.5, colorMask, 0.5, 0, imgWithMask);
         // cv::Mat imgWithSMask;
         // cv::addWeighted(imgWithMask, 0.5, colorSMask, 0.5, 0, imgWithSMask);
-        // for(auto area : mpDetector->mvDynamicArea){
-        //     cv::rectangle(imgWithSMask, area, cv::Scalar(0, 255, 0), 2);
-        // }
+        for(auto area : mpDetector->mvDynamicArea){
+            cv::rectangle(imgWithMask, area, cv::Scalar(0, 255, 0), 2);
+        }
 
-        // cv::imwrite("/mnt/workspace/YOLO_ORB_SLAM3/res/dmask.png", imgWithSMask);
+        cv::imwrite("/home/lyl/YOLO_ORB_SLAM3/res/dmask.png", imgWithMask);
         
         if(mpViewer){
             std::unique_lock<std::mutex> lock(mpViewer->mMutexPAFinsh);
@@ -1613,12 +1613,13 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
      
     //std::cout << "mLastFrame.mvpMapPoints.size() = " << mCurrentFrame.mvpMapPoints.size() << std::endl; 
     if(!mImGrayPre.empty() && !mImGray.empty() && mImGrayPre.size() == mImGray.size())
+    if(mImgWin.size() == 2)
     {
         //cv::Mat motionMask = cv::Mat::zeros(mImGrayPre.size(), CV_8UC1);
-        std::cout << "Calculating motion mask..." << std::endl;
+        //std::cout << "Calculating motion mask..." << std::endl;
         // 调用静态函数，使用默认阈值5.0
-        OpticalFlowUtils::calculateMotionMask(mImGrayPre, mImGray);
-        std::cout << "Calculation finished." << std::endl;
+        OpticalFlowUtils::calculateMotionMask(mImgWin.front(), mImGray);
+        //std::cout << "Calculation finished." << std::endl;
         mpORBextractorLeft->mLKMask = OpticalFlowUtils::getMask();
         if (OpticalFlowUtils::isOFReliable()) {
             cv::imwrite("./motion_mask.png", OpticalFlowUtils::getMask());
@@ -1655,6 +1656,10 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
 
     Track();
     mImGrayPre = mImGray;
+    if (mImgWin.size() > 2) {
+        mImgWin.pop();
+    }
+    mImgWin.push(mImGray);
     return mCurrentFrame.GetPose();
 }
 

@@ -76,7 +76,7 @@ int main(int argc, char **argv)
     cv::Mat imRGB, imD;
     for(int ni=0; ni<nImages; ni++)
     {
-        if((ni+1) % 50 == 0) {
+        if((ni+1) % 500 == 0) {
             std::cout << "Processing frame " << ni+1 << std::endl;
         }
         // Read image and depthmap from file

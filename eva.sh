@@ -58,8 +58,8 @@ for seq in "${sequences[@]}"; do
         -va \
         --plot \
         --plot_mode xy \
-        --save_plot "${traj_save_root}/${seq}/plot_xy.png" \
-        --save_results "${traj_save_root}/${seq}/results.zip"
+        # --save_plot "${traj_save_root}/${seq}/plot_xy.png" \
+        # --save_results "${traj_save_root}/${seq}/results.zip"
     
     echo "序列 $seq 处理完成"
     echo ""

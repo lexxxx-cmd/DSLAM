@@ -63,7 +63,7 @@ YDETRDetector::YDETRDetector() : BaseDetection() {
     std::cout << "----DETRDetector init----\n";
 }
 bool YDETRDetector::Detect() {
-    std::cout << "DETR detecting\n";
+    //std::cout << "DETR detecting\n";
     if(mRGB.empty())
     {
         std::cout << "Read RGB failed!" << std::endl;
@@ -187,64 +187,96 @@ std::vector<at::Tensor> YDETRDetector::PostProcess(const at::Tensor& preds) {
     return vTmpOutput;
 }
 
+// 改进后的函数
 void YDETRDetector::maskUpdate(cv::Rect2i& DynamicArea) {
-    //cv::Mat localMask = cv::Mat::zeros(mRGB.rows, mRGB.cols, CV_8UC1);
-    cv::Rect2i box = DynamicArea;
-    cv::Mat imDepthLocal = mDepth.clone();
-    cv::Mat imBoxTight = imDepthLocal(box);
+    // 确保输入框在图像范围内
+    cv::Rect2i box = DynamicArea & cv::Rect(0, 0, mDepth.cols, mDepth.rows);
+    if (box.area() == 0) {
+        allDelete = true; // 如果框无效，则标记为删除
+        return;
+    }
 
-	std::vector<float> validPixelsInBox;
-	for (int y = 0; y < imBoxTight.rows; y++)
-	{
-		for (int x = 0; x < imBoxTight.cols; x++)
-		{
-			const float val = imBoxTight.at<float>(y, x);
-			if (val > 0) validPixelsInBox.push_back(val);
-		}
-	}
+    // 1. 正确提取ROI并处理数据类型
+    // mDepth 是 CV_16U (unsigned short), mMask 是 CV_8U (uchar)
+    // .at<T> 中的 T 必须与Mat的类型严格匹配！
+    cv::Mat imBoxTight = mDepth(box);
 
-	std::sort(validPixelsInBox.begin(), validPixelsInBox.end());
-	float median = validPixelsInBox[validPixelsInBox.size() / 2];
-	float third = validPixelsInBox[validPixelsInBox.size() / 3];
-	float value = (median + third) / 2.0;
+    std::vector<ushort> validPixelsInBox;
+    validPixelsInBox.reserve(imBoxTight.rows * imBoxTight.cols);
+    for (int y = 0; y < imBoxTight.rows; y++) {
+        // 使用指针访问，比 .at() 更快
+        const ushort* row_ptr = imBoxTight.ptr<ushort>(y);
+        for (int x = 0; x < imBoxTight.cols; x++) {
+            const ushort val = row_ptr[x];
+            if (val > 0) { // 假设0是无效深度值
+                validPixelsInBox.push_back(val);
+            }
+        }
+    }
+
+    // 如果框内没有有效深度点，则无法进行分割
+    if (validPixelsInBox.empty()) {
+        allDelete = true;
+        return;
+    }
+
+    // 2. 稳健地计算中位数和阈值
+    // 使用 std::nth_element 比完全排序更高效
+    auto median_it = validPixelsInBox.begin() + validPixelsInBox.size() / 2;
+    std::nth_element(validPixelsInBox.begin(), median_it, validPixelsInBox.end());
+    const float median = static_cast<float>(*median_it);
 
     std::vector<float> differences;
     differences.reserve(validPixelsInBox.size());
-    for(const float& val : validPixelsInBox) {
-        //减的是中位数。。
-        differences.push_back(std::abs(val - median));
+    for (const ushort& val : validPixelsInBox) {
+        differences.push_back(std::abs(static_cast<float>(val) - median));
     }
-    // 对差值排序
-    std::sort(differences.begin(), differences.end());
-    // 使用差值分布的分位数作为阈值
-    float threshold = differences[differences.size() * 0.68];  // 68%分位数
 
-    //在这里扭曲了。。
-    int expansion = 30;
-    // 计算扩展后的区域（需要边界检查）
-    int x1 = std::max(0, box.x - expansion);
-    int y1 = std::max(0, box.y - expansion);
-    int x2 = std::min(mRGB.cols, box.x + box.width + expansion);
-    int y2 = std::min(mRGB.rows, box.y + box.height + expansion);
+    // 同样，使用 nth_element 找到68%分位数的差值作为阈值
+    auto threshold_it = differences.begin() + static_cast<size_t>(differences.size() * 0.68);
+    std::nth_element(differences.begin(), threshold_it, differences.end());
+    const float threshold = *threshold_it;
+
+    // 3. 修正循环边界和mask赋值
+    const float aspect = static_cast<float>(box.height) / box.width;
+    const bool fill = (aspect < 1.0/2.8) || (aspect > 2.8);
+
+    // 扩展区域，并进行边界检查
+    const int expansion = 5;
+    const int x1 = std::max(0, box.x - expansion);
+    const int y1 = std::max(0, box.y - expansion);
+    const int x2 = std::min(mDepth.cols, box.x + box.width + expansion);
+    const int y2 = std::min(mDepth.rows, box.y + box.height + expansion);
 
     int cnt = 0;
-    for (int y = 0; y < imDepthLocal.rows; ++y)
-	{
-		for (int x = 0; x < imDepthLocal.cols; ++x)
-		{
-			if (
-                imDepthLocal.at<float>(y, x) > 0 && 
-                ((imDepthLocal.at<float>(y, x)-median) < threshold)
-                ) {
-                    mMask.at<uchar>(y, x*2) = 1;
-                    mMask.at<uchar>(y, x*2+1) = 1;
-                    cnt += 2;
+    for (int y = y1; y < y2; ++y) {
+        // 获取深度图和掩码图的行指针
+        const ushort* depth_row_ptr = mDepth.ptr<ushort>(y);
+        uchar* mask_row_ptr = mMask.ptr<uchar>(y);
+
+        // 关键修正：循环边界是 x2，不是 y2！
+        for (int x = x1; x < x2; ++x) {
+            if (fill) {
+                // 关键修正：直接用 x 索引，不再 *2
+                mask_row_ptr[x] = 1;
+                cnt++;
+            } else {
+                const ushort depth_val = depth_row_ptr[x];
+                // 确保深度有效，并且与中位数的差在阈值内
+                if (depth_val > 0 && (std::abs(static_cast<float>(depth_val) - median) < threshold)) {
+                    // 关键修正：直接用 x 索引
+                    mask_row_ptr[x] = 1;
+                    cnt++;
                 }
-                //我也不知道这里为什么要*2，
-                
-		}
-	}
-    if(cnt / DynamicArea.area() < 0.25) {allDelete = true;}
-    else {allDelete = false;}
-    //cv::imwrite("/mnt/workspace/YOLO_ORB_SLAM3/res/dmask.png", mMask);
+            }
+        }
+    }
+
+    // 4. 更新状态
+    // 判断填充的像素数是否足够
+    if (static_cast<float>(cnt) / box.area() < 0.25) {
+        allDelete = true;
+    } else {
+        allDelete = false;
+    }
 }

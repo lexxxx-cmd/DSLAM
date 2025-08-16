@@ -421,6 +421,7 @@ public:
     std::vector <KeyFrame*> mvpLoopCandKFs;
     std::vector <KeyFrame*> mvpMergeCandKFs;
 
+    Eigen::Matrix<float, 12, 16> prob_map;
     //bool mbHasHessian;
     //cv::Mat mHessianPose;
 

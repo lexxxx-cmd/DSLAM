@@ -40,6 +40,7 @@
 #include "GeometricCamera.h"
 
 #include <mutex>
+#include <queue>
 #include <unordered_set>
 #include "YoloDetect.h"
 
@@ -150,6 +151,7 @@ public:
     
     //光流跟踪需要的数据
     cv::Mat mImGrayPre;
+    std::queue<cv::Mat> mImgWin;
     std::vector<cv::Point2f> prepoint, nextpoint;
     std::vector<cv::Point2f> F_prepoint, F_nextpoint;
     std::vector<cv::Point2f> F2_prepoint, F2_nextpoint;
