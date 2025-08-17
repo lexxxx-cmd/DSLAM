@@ -1612,18 +1612,15 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
     //光流跟踪一致性
      
     //std::cout << "mLastFrame.mvpMapPoints.size() = " << mCurrentFrame.mvpMapPoints.size() << std::endl; 
-    if(!mImGrayPre.empty() && !mImGray.empty() && mImGrayPre.size() == mImGray.size())
-    if(mImgWin.size() == 2)
+    //if(!mImGrayPre.empty() && !mImGray.empty() && mImGrayPre.size() == mImGray.size())
+    mpORBextractorLeft->mLKMask = OpticalFlowUtils::getMask();
+    if(mImgWin.size() == 3)
     {
         //cv::Mat motionMask = cv::Mat::zeros(mImGrayPre.size(), CV_8UC1);
         //std::cout << "Calculating motion mask..." << std::endl;
         // 调用静态函数，使用默认阈值5.0
         OpticalFlowUtils::calculateMotionMask(mImgWin.front(), mImGray);
         //std::cout << "Calculation finished." << std::endl;
-        mpORBextractorLeft->mLKMask = OpticalFlowUtils::getMask();
-        if (OpticalFlowUtils::isOFReliable()) {
-            cv::imwrite("./motion_mask.png", OpticalFlowUtils::getMask());
-        }
     }
     
     if (mSensor == System::RGBD)
@@ -1656,10 +1653,11 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
 
     Track();
     mImGrayPre = mImGray;
-    if (mImgWin.size() > 2) {
+    if (mImgWin.size() >= 3) {
         mImgWin.pop();
     }
     mImgWin.push(mImGray);
+    mpORBextractorLeft->mLKMask = OpticalFlowUtils::getMask();
     return mCurrentFrame.GetPose();
 }
 

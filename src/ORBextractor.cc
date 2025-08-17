@@ -881,16 +881,12 @@ namespace ORB_SLAM3
                                     }
                                     else if(inDynamicMask(vit_kp->pt) || mDepth.at<uchar>(vit_kp->pt.y, vit_kp->pt.x) <= 0){
                                         // 光流拉一下
-                                        if(OpticalFlowUtils::isOFReliable()) {
-                                            if(inDynamicLKMask(vit_kp->pt)) {
-                                                Find = true;
-                                                vit_kp = vToDistributeKeys.erase(vit_kp);
-                                                break;
-                                            }
-                                        }else {
+                                        if(inDynamicLKMask(vit_kp->pt)) {
                                             Find = true;
                                             vit_kp = vToDistributeKeys.erase(vit_kp);
                                             break;
+                                        }else{
+                                            vit_kp->class_id = 2; 
                                         }
                                     }
                                     
@@ -1244,10 +1240,14 @@ namespace ORB_SLAM3
                     monoIndex++;
                 }
                 i++;
-                const int i = keypoint->pt.y / 40;
-                const int j = keypoint->pt.x / 40;
-                observation_matrix(i, j) = 1;
-                cv::circle(rgb, keypoint->pt, 3, cv::Scalar(0, 0, 255), -1);
+                if(keypoint->class_id != 2) {
+                    const int iy = keypoint->pt.y / 40;
+                    const int ix = keypoint->pt.x / 40;
+                    observation_matrix(iy, ix) = 1;
+                    cv::circle(rgb, keypoint->pt, 3, cv::Scalar(0, 255, 0), -1);
+                }else{
+                    cv::circle(rgb, keypoint->pt, 3, cv::Scalar(0, 0, 255), -1);
+                }
             }
         }
         StaticProbabilityGrid::update(observation_matrix);
@@ -1305,7 +1305,7 @@ namespace ORB_SLAM3
         int expandision = 3;
         for (int i = -expandision; i <= expandision; i++) {
             for (int j = -expandision; j <= expandision; j++) {
-                if (mask.at<uchar>(pt.y + i, pt.x + j) == 255) {
+                if (mask.at<uchar>(pt.y + i, pt.x + j) == 255 || mLKMask.at<uchar>(pt.y + i, pt.x + j) == 255) {
                     return true;
                     break;
                 }

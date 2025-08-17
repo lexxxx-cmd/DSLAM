@@ -263,7 +263,8 @@ void YDETRDetector::maskUpdate(cv::Rect2i& DynamicArea) {
             } else {
                 const ushort depth_val = depth_row_ptr[x];
                 // 确保深度有效，并且与中位数的差在阈值内
-                if (depth_val > 0 && (std::abs(static_cast<float>(depth_val) - median) < threshold)) {
+                //if (depth_val > 0 && (std::abs(static_cast<float>(depth_val) - median) < threshold)) {
+                if (depth_val > 0 && (static_cast<float>(depth_val) < median+threshold)) {
                     // 关键修正：直接用 x 索引
                     mask_row_ptr[x] = 1;
                     cnt++;

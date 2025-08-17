@@ -22,34 +22,33 @@ public:
      * @param nextFrame 后一帧的灰度图 (CV_8UC1)。
      * @param magnitudeThreshold 幅度阈值。光流向量的长度超过此值时，才被认为是显著运动。
      */
-    static void calculateMotionMask(const cv::Mat& prevFrame, const cv::Mat& nextFrame, double magnitudeThreshold = 5.0) {
+    static void calculateMotionMask(const cv::Mat& prevFrame, const cv::Mat& nextFrame, double magnitudeThreshold = 4.0, int num_bins = 256, int offset = 10) {
         auto& mask = getMask();
         mask = cv::Mat::zeros(prevFrame.size(), CV_8UC1);
+        mask.setTo(255);
         // --- 1. 输入验证 ---
         // 确保输入图像非空
-        auto& isReliable = isOFReliable();
         if (prevFrame.empty() || nextFrame.empty()) {
             std::cerr << "Error: Input frames cannot be empty." << std::endl;
-            isReliable = false;
+
             return;
         }
         // 确保图像尺寸相同
         if (prevFrame.size() != nextFrame.size()) {
             std::cerr << "Error: Input frames must have the same size." << std::endl;
-            isReliable = false;
+
             return;
         }
         // 确保图像为单通道8位灰度图
         if (prevFrame.type() != CV_8UC1 || nextFrame.type() != CV_8UC1) {
             std::cerr << "Error: Input frames must be of type CV_8UC1 (grayscale)." << std::endl;
-            isReliable = false;
+
             return;
         }
         // 确保掩码与图像尺寸相同且类型正确
         if (mask.size() != prevFrame.size() || mask.type() != CV_8UC1) {
             std::cerr << "Error: Mask must have the same size as frames and be of type CV_8UC1." << std::endl;
             // 可以选择在这里自动创建/重置mask
-            isReliable = false;
             return;
         }
 
@@ -72,40 +71,88 @@ public:
         cv::calcOpticalFlowFarneback(prevFrame, nextFrame, flow, 0.5, 3, 15, 3, 5, 1.2, 0);
         int motionPixels = 0;
         int totalPixels = flow.rows * flow.cols;
-        // --- 3. 遍历光流场并更新Mask ---
-        for (int y = 0; y < flow.rows; ++y) {
-            for (int x = 0; x < flow.cols; ++x) {
-                // 获取(x, y)处的光流向量
-                const cv::Point2f& flow_at_xy = flow.at<cv::Point2f>(y, x);
-                
-                // 计算光流向量的幅度 (magnitude)
-                float dx = flow_at_xy.x;
-                float dy = flow_at_xy.y;
-                double magnitude = std::sqrt(dx * dx + dy * dy);
+        // 1. 计算光流幅度并归一化到8位
+        std::vector<cv::Mat> flow_channels(2);
+        cv::split(flow, flow_channels); // 将2通道的flow分离为x和y两个单通道Mat
 
-                // 如果幅度大于阈值，则在mask上标记该点
-                if (magnitude > magnitudeThreshold) {
-                    mask.at<uchar>(y, x) = 255;
-                    motionPixels++;
-                }
-            }
-        }
-        double motionRatio = static_cast<double>(motionPixels) / totalPixels;
-        isReliable = motionRatio <= 0.7;  // 显著运动区域不超过70%则认为可靠
+        cv::Mat magnitude;
+        // 计算光流的幅度 sqrt(flow_x^2 + flow_y^2)
+        cv::magnitude(flow_channels[0], flow_channels[1], magnitude);
 
-        if (!isReliable) {
-            // 如果不可靠，可以选择清空掩码或保持原样
-            mask.setTo(0);  // 根据需求决定是否注释掉这行
-            // std::cerr << "Warning: Optical flow detection unreliable. Motion area: " 
-            //           << motionRatio * 100 << "%" << std::endl;
+        cv::Mat mag_norm;
+        // 将幅度归一化到 0-255 范围
+        cv::normalize(magnitude, mag_norm, 0, 255, cv::NORM_MINMAX);
+
+        cv::Mat mag_uint8;
+        // 转换为8位无符号整数类型 (CV_8U)
+        mag_norm.convertTo(mag_uint8, CV_8U);
+
+        // 2. 计算直方图
+        cv::Mat hist;
+        int histSize[] = { num_bins }; // 直方图的bin数量
+        float range[] = { 0, 256 };    // 像素值范围
+        const float* histRange[] = { range };
+        int channels[] = { 0 };
+
+        cv::calcHist(&mag_uint8, 1, channels, cv::Mat(), hist, 1, histSize, histRange, true, false);
+
+        // 3. 找到峰值位置
+        // 为避免极端情况，忽略直方图最开始和最后的部分
+        // Python中 hist[5:250] 对应C++中 rowRange(5, 250)
+        cv::Mat search_range = hist.rowRange(5, 250);
+        
+        double minVal, maxVal;
+        cv::Point minLoc, maxLoc;
+        // 在指定范围内查找最大值及其位置
+        cv::minMaxLoc(search_range, &minVal, &maxVal, &minLoc, &maxLoc);
+
+        // peak_location 是最大值在 search_range 中的索引(maxLoc.y)
+        // 加上起始偏移量5，得到在完整直方图中的索引
+        // 注意：原始Python代码中为 `+ 15`，这可能是个笔误，逻辑上应为 `+ 5`。
+        // 这里我们遵循原始代码的逻辑，但已添加注释。如果需要，可以改为 `+ 5`。
+        int peak_location = maxLoc.y + 5; 
+
+        // 4. 计算自适应阈值
+        double adaptive_threshold = peak_location + offset;
+        // 阈值不能超过255
+        adaptive_threshold = std::min(adaptive_threshold, 255.0);
+        
+        //std::cout << "直方图峰值位于: " << peak_location << ", 自适应阈值: " << adaptive_threshold << std::endl;
+
+        // 5. 应用阈值分割
+        cv::Mat ratio;
+        cv::threshold(mag_uint8, ratio, 50, 255, cv::THRESH_BINARY);
+        if(static_cast<float>(countNonZero(ratio)/ratio.total())>0.7){
+            mask.setTo(255); 
+        }else{
+       
+            cv::Mat motion_mask;
+            cv::threshold(mag_uint8, motion_mask, adaptive_threshold, 255, cv::THRESH_BINARY);
+            cv::Mat kernel_small = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(5, 5));
+            cv::Mat kernel_large = cv::getStructuringElement(cv::MORPH_RECT, cv::Size(7, 7));
+
+            cv::Mat temp_mask;
+            cv::Mat result_mask;
+
+            // 1. 开运算：去除外部噪点 (Erosion followed by Dilation)
+            // 使用较小的内核去除小的椒盐噪声
+            cv::morphologyEx(motion_mask, temp_mask, cv::MORPH_OPEN, kernel_small);
+
+            // 2. 闭运算：填充内部空洞 (Dilation followed by Erosion)
+            // 使用较大的内核来连接邻近的白色区域并填充较大的孔洞
+            cv::morphologyEx(temp_mask, result_mask, cv::MORPH_CLOSE, kernel_large);
+
+            mask = result_mask.clone();
+                 
         }
     }
+    /*
     static bool& isOFReliable() {
         static bool isReliable = false;
         return isReliable;
-    }
+    }*/
     static cv::Mat& getMask() {
-        static cv::Mat mask = cv::Mat();
+        static cv::Mat mask = cv::Mat(480, 640, CV_8UC1, cv::Scalar(255));
         return mask;
     }
 private:

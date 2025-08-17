@@ -101,6 +101,7 @@ public:
     std::vector<uchar> forward_state;
     std::vector<float> err;
     int limit_edge_corner = 5;
+    std::queue<cv::Mat> mLKMaskWin;
 
 protected:
 
@@ -130,6 +131,7 @@ protected:
     int minThFAST;
 
     std::vector<int> mnFeaturesPerLevel;
+    
 
     std::vector<int> umax;
 
