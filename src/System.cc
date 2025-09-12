@@ -227,6 +227,14 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR, activeLC); // mSensor!=MONOCULAR);
     mptLoopClosing = new thread(&ORB_SLAM3::LoopClosing::Run, mpLoopCloser);
 
+    double resolution = 0.05;
+    double blur_threshold = 100.0;
+    int batch_size = 10;
+    mpPointCloudMapper = new PointCloudMapping(resolution, blur_threshold, batch_size);
+
+    // 2. 将点云模块的指针设置给Tracking模块
+    mpTracker->SetPointCloudMapper(mpPointCloudMapper);
+
     //Set pointers between threads
     mpTracker->SetLocalMapper(mpLocalMapper);
     mpTracker->SetLoopClosing(mpLoopCloser);
@@ -536,6 +544,8 @@ void System::Shutdown()
 
     mpLocalMapper->RequestFinish();
     mpLoopCloser->RequestFinish();
+    if(mpPointCloudMapper)
+        mpPointCloudMapper->shutdown();
     /*if(mpViewer)
     {
         mpViewer->RequestFinish();
@@ -1328,6 +1338,11 @@ void System::SaveDebugData(const int &initIdx)
     f << fixed;
     f << mpLocalMapper->mInitTime << endl;
     f.close();
+}
+
+PointCloudMapping::PointCloud::Ptr System::GetPointCloudMap()
+{
+    return mpPointCloudMapper->assembleFinalMap();
 }
 
 

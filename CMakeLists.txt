@@ -55,6 +55,22 @@ find_package(realsense2)
 #set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} "/mnt/workspace/YOLO_ORB_SLAM3/RTDETRTest/Thirdparty/libtorch")
 find_package(Torch REQUIRED)
 
+find_package(PCL 1.12 REQUIRED)
+add_library(PointCloudMapper STATIC
+        src/PointCloud.cpp
+)
+set_target_properties(PointCloudMapper PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(PointCloudMapper PUBLIC
+        ${PCL_INCLUDE_DIRS}
+        ${PROJECT_SOURCE_DIR}/include
+        ${EIGEN3_INCLUDE_DIR}
+        ${OPENCV_INCLUDE_DIR}
+)
+target_compile_definitions(PointCloudMapper PUBLIC
+        ${PCL_DEFINITIONS}
+)
+target_link_libraries(PointCloudMapper PUBLIC ${PCL_LIBRARIES} ${OpenCV_LIBS})
+
 include_directories(
         ${PROJECT_SOURCE_DIR}
         ${PROJECT_SOURCE_DIR}/include
@@ -135,7 +151,7 @@ add_library(${PROJECT_NAME} SHARED
 
 add_subdirectory(Thirdparty/g2o)
 
-target_link_libraries(${PROJECT_NAME}
+target_link_libraries(${PROJECT_NAME} PUBLIC
         ${OpenCV_LIBS}
         ${EIGEN3_LIBS}
         ${Pangolin_LIBRARIES}
@@ -144,7 +160,7 @@ target_link_libraries(${PROJECT_NAME}
         ${TORCH_LIBRARIES}
         -lboost_serialization
         -lcrypto
-        )
+        PointCloudMapper)
 
 # If RealSense SDK is found the library is added and its examples compiled
 if(realsense2_FOUND)
@@ -164,7 +180,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/RGB-D)
 
 add_executable(rgbd_tum
         Examples/RGB-D/rgbd_tum.cc)
-target_link_libraries(rgbd_tum ${PROJECT_NAME})
+target_link_libraries(rgbd_tum ${PROJECT_NAME} PointCloudMapper)
 
 if(realsense2_FOUND)
     add_executable(rgbd_realsense_D435i

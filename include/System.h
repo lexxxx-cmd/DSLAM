@@ -44,6 +44,7 @@
 #include "YRTDETRDetector.h"
 #include "BaseDetector.h"
 #include "DetectorFactory.hpp"
+#include "PointCloud.h"
 //#include "RTDETRDetector.h"
 
 namespace ORB_SLAM3
@@ -108,7 +109,9 @@ public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
     // Initialize the SLAM system. It launches the Local Mapping, Loop Closing and Viewer threads.
     System(const string &strVocFile, const string &strSettingsFile, const eSensor sensor, const bool bUseViewer = true, const int initFr = 0, const string &strSequence = std::string());
-
+    ~System() {
+        delete mpPointCloudMapper;
+    }
     // Proccess the given stereo frame. Images must be synchronized and rectified.
     // Input images: RGB (CV_8UC3) or grayscale (CV_8U). RGB is converted to grayscale.
     // Returns the camera pose (empty if tracking fails).
@@ -124,6 +127,7 @@ public:
     // Input images: RGB (CV_8UC3) or grayscale (CV_8U). RGB is converted to grayscale.
     // Returns the camera pose (empty if tracking fails).
     Sophus::SE3f TrackMonocular(const cv::Mat &im, const double &timestamp, const vector<IMU::Point>& vImuMeas = vector<IMU::Point>(), string filename="");
+    PointCloudMapping::PointCloud::Ptr GetPointCloudMap();
 
 
     // This stops local mapping thread (map building) and performs only camera tracking.
@@ -234,6 +238,7 @@ private:
 
     FrameDrawer* mpFrameDrawer;
     MapDrawer* mpMapDrawer;
+    PointCloudMapping* mpPointCloudMapper;
 
     // System threads: Local Mapping, Loop Closing, Viewer.
     // The Tracking thread "lives" in the main execution thread that creates the System object.

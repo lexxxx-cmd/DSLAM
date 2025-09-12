@@ -1425,6 +1425,11 @@ bool Tracking::ParseIMUParamFile(cv::FileStorage &fSettings)
     return true;
 }
 
+void Tracking::SetPointCloudMapper(PointCloudMapping* pPCM)
+{
+    mpPointCloudMapper = pPCM;
+}
+
 void Tracking::SetLocalMapper(LocalMapping *pLocalMapper)
 {
     mpLocalMapper=pLocalMapper;
@@ -1529,7 +1534,8 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
     mImGray = imRGB;
     cv::Mat imDepth = imD;
     mpORBextractorLeft->mDepth = imD;
-
+    mRGB = imRGB;
+    mD = imD;
     // detect
     if(mpDetector){
         //std::chrono::steady_clock::time_point time_StartPreIMU = std::chrono::steady_clock::now();
@@ -3440,6 +3446,18 @@ void Tracking::CreateNewKeyFrame()
     mnLastKeyFrameId = mCurrentFrame.mnId;
     mpLastKeyFrame = pKF;
     StaticProbabilityGrid::reset();
+
+    // 检查pKF和点云模块指针是否有效
+    if(pKF && mpPointCloudMapper)
+    {
+        // 假设mCurrentFrame.imColor和mCurrentFrame.imDepth是当前帧的彩色和深度图
+        // 注意：ORB-SLAM3原生处理的是灰度图，你需要确保能获取到对应的彩色图和深度图
+        // 如果你的系统是RGB-D模式，mCurrentFrame应该已经包含了这些信息
+        if(!mRGB.empty() && !mD.empty())
+        {
+            mpPointCloudMapper->insertKeyFrame(pKF, mRGB, mD);
+        }
+    }
 }
 
 void Tracking::SearchLocalPoints()

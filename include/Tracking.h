@@ -47,6 +47,7 @@
 #include "YRTDETRDetector.h"
 #include "BaseDetector.h"
 #include "DetectorFactory.hpp"
+#include "PointCloud.h" 
 
 
 namespace ORB_SLAM3
@@ -69,6 +70,8 @@ public:
              KeyFrameDatabase* pKFDB, const string &strSettingPath, const int sensor, Settings* settings, const string &_nameSeq=std::string());
 
     ~Tracking();
+
+    void SetPointCloudMapper(PointCloudMapping* pPCM);
 
     // Parse the config file
     bool ParseCamParamFile(cv::FileStorage &fSettings);
@@ -282,6 +285,9 @@ protected:
     //Other Thread Pointers
     LocalMapping* mpLocalMapper;
     LoopClosing* mpLoopClosing;
+    PointCloudMapping* mpPointCloudMapper;
+    cv::Mat mRGB;
+    cv::Mat mD;
 
     //ORB
     ORBextractor* mpORBextractorLeft, *mpORBextractorRight;

@@ -95,3 +95,7 @@ borrar/*
 
 */ExecMean.txt
 Examples_old/*
+include/detr.h
+src/detr.cpp
+motion_mask.png
+.vscode/launch.json
