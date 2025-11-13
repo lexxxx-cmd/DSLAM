@@ -11,9 +11,10 @@
 #include <pcl/point_types.h>
 #include <pcl/point_cloud.h>
 #include <pcl/filters/voxel_grid.h>
-#include <pcl/octree/octree_pointcloud_changedetector.h>
+#include <pcl/octree/octree_search.h>
 #include <pcl/filters/extract_indices.h>
 #include <pcl/common/transforms.h>
+#include <pcl/common/projection_matrix.h>
 
 #include "KeyFrame.h"
 #include "Converter.h"
@@ -85,8 +86,9 @@ private:
      * @brief 交叉验证的核心函数，从输入点云中过滤出静态点
      */
     void filterStaticPoints(const PointCloud::Ptr& cloud_in, 
-                            pcl::octree::OctreePointCloudChangeDetector<PointT>& octree_other, 
-                            PointCloud::Ptr& cloud_out);
+                            pcl::octree::OctreePointCloudSearch<PointT>& octree_other, 
+                            PointCloud::Ptr& cloud_out,
+                            double searchRadius);
     
     // --- 成员变量 ---
 
@@ -107,8 +109,8 @@ private:
     // 地图数据 - 现在分为主次两组，并且会持续累积
     PointCloud::Ptr mPrimaryPointCloud;   // 累积的主点云
     PointCloud::Ptr mSecondaryPointCloud; // 累积的次点云
-    std::unique_ptr<pcl::octree::OctreePointCloudChangeDetector<PointT>> mPrimaryOctree;
-    std::unique_ptr<pcl::octree::OctreePointCloudChangeDetector<PointT>> mSecondaryOctree;
+    std::unique_ptr<pcl::octree::OctreePointCloudSearch<PointT>> mPrimaryOctree;
+    std::unique_ptr<pcl::octree::OctreePointCloudSearch<PointT>> mSecondaryOctree;
 
     pcl::VoxelGrid<PointT> mVoxelGridFilter;
 };

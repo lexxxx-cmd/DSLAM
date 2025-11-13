@@ -55,6 +55,7 @@ RTDETRTest/Thirdparty/*
 KeyFrameTrajectory.txt
 CameraTrajectory.txt
 TrajSave/tum/*/*
+TrajSave/bonn/*/*
 TrajSave/kitti/*/*
 *.torchscript
 kf_*.txt
@@ -99,3 +100,4 @@ include/detr.h
 src/detr.cpp
 motion_mask.png
 .vscode/launch.json
+final_static_map.pcd

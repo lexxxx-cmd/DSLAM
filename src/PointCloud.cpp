@@ -1,16 +1,20 @@
 #include "PointCloud.h"
 #include <iostream>
 #include <algorithm>
-
+using PointT = pcl::PointXYZRGB;
+using PointCloud = pcl::PointCloud<PointT>;
 PointCloudMapping::PointCloudMapping(double resolution, double blurThreshold, int candidatePoolSize)
     : mResolution(resolution), mBlurThreshold(blurThreshold), mCandidatePoolSize(candidatePoolSize), mbShutdown(false) {
 
     // 初始化主次点云和八叉树
     mPrimaryPointCloud = std::make_shared<PointCloud>();
     mSecondaryPointCloud = std::make_shared<PointCloud>();
-    mPrimaryOctree = std::make_unique<pcl::octree::OctreePointCloudChangeDetector<PointT>>(mResolution);
-    mSecondaryOctree = std::make_unique<pcl::octree::OctreePointCloudChangeDetector<PointT>>(mResolution);
-
+    mPrimaryOctree = std::make_unique<pcl::octree::OctreePointCloudSearch<PointT>>(mResolution);
+    const double min_log_odds = -4.595; // log(0.01 / 0.99)
+    const double max_log_odds =  4.595; // log(0.99 / 0.01)
+   // mPrimaryOctree->setClampingThresholds(min_log_odds, max_log_odds); 
+    mSecondaryOctree = std::make_unique<pcl::octree::OctreePointCloudSearch<PointT>>(mResolution);
+   // mSecondaryOctree->setClampingThresholds(min_log_odds, max_log_odds);  
     mVoxelGridFilter.setLeafSize(mResolution, mResolution, mResolution);
 
     // 启动内部处理线程
@@ -87,28 +91,23 @@ void PointCloudMapping::processCandidateBatch() {
         [](const CandidateFrame& a, const CandidateFrame& b) {
         return a.mBlurScore > b.mBlurScore;
     });
-
-    // 将批次分为两半
-    size_t midPoint = processingFrames.size() / 2;
-
-    // 前一半加入主地图
-    for (size_t i = 0; i < midPoint; ++i) {
-        const auto& frame = processingFrames[i];
+    {
+        const auto& frame = processingFrames[0];
         PointCloud::Ptr localCloud = generatePointCloud(frame.mpKF, frame.mColorImg, frame.mDepthImg);
-        *mPrimaryPointCloud += *localCloud;
-        mPrimaryOctree->setInputCloud(localCloud);
-        mPrimaryOctree->addPointsFromInputCloud();
-        mPrimaryOctree->switchBuffers(); // 固化本次添加，为下次比较做准备
+        *mPrimaryPointCloud += *localCloud; 
     }
-
-    // 后一半加入次地图
-    for (size_t i = midPoint; i < processingFrames.size(); ++i) {
-        const auto& frame = processingFrames[i];
+    {
+        const auto& frame = processingFrames[1];
         PointCloud::Ptr localCloud = generatePointCloud(frame.mpKF, frame.mColorImg, frame.mDepthImg);
         *mSecondaryPointCloud += *localCloud;
-        mSecondaryOctree->setInputCloud(localCloud);
+    }
+    if (!mPrimaryPointCloud->empty()) {
+        mPrimaryOctree->setInputCloud(mPrimaryPointCloud);
+        mPrimaryOctree->addPointsFromInputCloud();
+    }
+    if (!mSecondaryPointCloud->empty()) {
+        mSecondaryOctree->setInputCloud(mSecondaryPointCloud);
         mSecondaryOctree->addPointsFromInputCloud();
-        mSecondaryOctree->switchBuffers();
     }
 }
 
@@ -121,19 +120,23 @@ PointCloudMapping::PointCloud::Ptr PointCloudMapping::assembleFinalMap() {
     PointCloud::Ptr staticFromPrimary = std::make_shared<PointCloud>();
     PointCloud::Ptr staticFromSecondary = std::make_shared<PointCloud>();
 
+    const double validationRadius = mResolution * 1.5;
+
     // 用次八叉树 M2 验证主点云 P1
-    filterStaticPoints(mPrimaryPointCloud, *mSecondaryOctree, staticFromPrimary);
+    filterStaticPoints(mPrimaryPointCloud, *mSecondaryOctree, staticFromPrimary, validationRadius);
     
     // 用主八叉树 M1 验证次点云 P2
-    filterStaticPoints(mSecondaryPointCloud, *mPrimaryOctree, staticFromSecondary);
+    filterStaticPoints(mSecondaryPointCloud, *mPrimaryOctree, staticFromSecondary, validationRadius);
 
     std::cout << "Filtering results: Static from Primary: " << staticFromPrimary->size() << "/" << mPrimaryPointCloud->size() << std::endl;
     std::cout << "Filtering results: Static from Secondary: " << staticFromSecondary->size() << "/" << mSecondaryPointCloud->size() << std::endl;
 
     // 2. 合并过滤后的静态点云
     PointCloud::Ptr finalStaticMap = std::make_shared<PointCloud>();
-    *finalStaticMap += *staticFromPrimary;
-    *finalStaticMap += *staticFromSecondary;
+    // *finalStaticMap += *staticFromPrimary;
+    // *finalStaticMap += *staticFromSecondary;
+    *finalStaticMap += *mPrimaryPointCloud;
+    *finalStaticMap += *mSecondaryPointCloud;
 
     // 3. 对最终地图进行下采样以统一密度
     PointCloud::Ptr downsampledMap = std::make_shared<PointCloud>();
@@ -157,31 +160,32 @@ double PointCloudMapping::calculateBlurScore(const cv::Mat& image) {
 
 PointCloudMapping::PointCloud::Ptr PointCloudMapping::generatePointCloud(ORB_SLAM3::KeyFrame* kf, const cv::Mat& color, const cv::Mat& depth) {
     PointCloud::Ptr cloud(new PointCloud());
-    cloud->height = depth.rows;
-    cloud->width = depth.cols;
-    cloud->is_dense = false;
-    cloud->points.resize(cloud->height * cloud->width);
 
     for (int m = 0; m < depth.rows; m++) {
         for (int n = 0; n < depth.cols; n++) {
             float d = depth.ptr<float>(m)[n];
-            PointT& p = cloud->at(n, m);
+            
 
             if (d < 0.1 || d > 10.0) {
-                p.x = p.y = p.z = std::numeric_limits<float>::quiet_NaN();
                 continue;
             }
+            if(kf->mMask.at<uchar>(m, n) == 0) {
+                PointT p;
+                p.z = d;
+                p.x = (n - kf->cx) * p.z / kf->fx;
+                p.y = (m - kf->cy) * p.z / kf->fy;
 
-            p.z = d;
-            p.x = (n - kf->cx) * p.z / kf->fx;
-            p.y = (m - kf->cy) * p.z / kf->fy;
-
-            p.b = color.at<cv::Vec3b>(m, n)[0];
-            p.g = color.at<cv::Vec3b>(m, n)[1];
-            p.r = color.at<cv::Vec3b>(m, n)[2];
+                p.b = color.at<cv::Vec3b>(m, n)[0];
+                p.g = color.at<cv::Vec3b>(m, n)[1];
+                p.r = color.at<cv::Vec3b>(m, n)[2];
+                cloud->push_back(p);
+            }
         }
     }
-
+    if (cloud->empty()) {
+        // 返回一个空的 world cloud，保持接口一致性
+        return PointCloud::Ptr(new PointCloud()); 
+    }
     PointCloud::Ptr cloud_world(new PointCloud());
     Eigen::Isometry3d T = ORB_SLAM3::Converter::toSE3Quat(kf->GetPose());
     pcl::transformPointCloud(*cloud, *cloud_world, T.matrix());
@@ -194,18 +198,30 @@ PointCloudMapping::PointCloud::Ptr PointCloudMapping::generatePointCloud(ORB_SLA
 }
 
 void PointCloudMapping::filterStaticPoints(const PointCloud::Ptr& cloud_in, 
-                                           pcl::octree::OctreePointCloudChangeDetector<PointT>& octree_other, 
-                                           PointCloud::Ptr& cloud_out) {
-    std::vector<int> dynamic_indices;
-    octree_other.setInputCloud(cloud_in);
-    octree_other.getPointIndicesFromNewVoxels(dynamic_indices);
+                            pcl::octree::OctreePointCloudSearch<PointT>& octree_other, 
+                            PointCloud::Ptr& cloud_out,
+                            double searchRadius) {
+    cloud_out->clear();
 
-    pcl::PointIndices::Ptr dynamic_indices_ptr(new pcl::PointIndices());
-    dynamic_indices_ptr->indices = dynamic_indices;
+    cloud_out->points.reserve(cloud_in->size());
 
-    pcl::ExtractIndices<PointT> extract;
-    extract.setInputCloud(cloud_in);
-    extract.setIndices(dynamic_indices_ptr);
-    extract.setNegative(true);
-    extract.filter(*cloud_out);
+    std::vector<int> pointIdxRadiusSearch;
+    std::vector<float> pointRadiusSquaredDistance;
+
+    for (const auto& point : cloud_in->points) {
+        // 检查点是否有效
+        if (!pcl::isFinite(point)) {
+            continue;
+        }
+
+        if (octree_other.radiusSearch(point, searchRadius, pointIdxRadiusSearch, pointRadiusSquaredDistance, 1) > 0) {
+            // 如果在 searchRadius 范围内找到了至少一个点，则将该点视为静态点
+            cloud_out->push_back(point);
+        }
+    }
+
+    // 更新输出点云的元数据
+    cloud_out->width = cloud_out->points.size();
+    cloud_out->height = 1;
+    cloud_out->is_dense = true;
 }
