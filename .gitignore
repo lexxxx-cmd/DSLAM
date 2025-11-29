@@ -55,7 +55,7 @@ RTDETRTest/Thirdparty/*
 KeyFrameTrajectory.txt
 CameraTrajectory.txt
 TrajSave/tum/*/*
-TrajSave/bonn/*/*
+TrajSave/bonn/*
 TrajSave/kitti/*/*
 *.torchscript
 kf_*.txt

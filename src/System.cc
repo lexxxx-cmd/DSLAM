@@ -190,6 +190,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     
     */
     mpDetector = DetectorFactory::createDetector(settings_->GetDetector());
+    detector = new RTDetr("/home/lyl/YOLO_ORB_SLAM3/model.engine");
     
 
     //Create Drawers. These are used by the Viewer
@@ -203,7 +204,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
                              mpAtlas, mpKeyFrameDatabase, strSettingsFile, mSensor, settings_, strSequence);
 
     mpTracker->SetDetector(std::move(mpDetector));
-    //mpTracker->SetDetector(mpDetectorDETR);
+    mpTracker->SetTrtDetector(detector);
 
     //Initialize the Local Mapping thread and launch
     mpLocalMapper = new LocalMapping(this, mpAtlas, mSensor==MONOCULAR || mSensor==IMU_MONOCULAR,

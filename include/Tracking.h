@@ -47,7 +47,8 @@
 #include "YRTDETRDetector.h"
 #include "BaseDetector.h"
 #include "DetectorFactory.hpp"
-#include "PointCloud.h" 
+#include "PointCloud.h"
+#include "RTdetr_opencv.h" 
 
 
 namespace ORB_SLAM3
@@ -90,6 +91,7 @@ public:
     void SetLoopClosing(LoopClosing* pLoopClosing);
     void SetViewer(Viewer* pViewer);
     void SetDetector(std::unique_ptr<BaseDetection> Detector);
+    void SetTrtDetector(RTDetr *Detector);
     void SetStepByStep(bool bSet);
     bool GetStepByStep();
 
@@ -319,6 +321,7 @@ protected:
     //YoloDetection* mpDetectorYOLO;
     //DETRDetector* mpDetectorDETR;
     std::unique_ptr<BaseDetection> mpDetector;
+    RTDetr* detector;
 
     //Atlas
     Atlas* mpAtlas;

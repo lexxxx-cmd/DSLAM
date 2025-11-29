@@ -133,10 +133,10 @@ PointCloudMapping::PointCloud::Ptr PointCloudMapping::assembleFinalMap() {
 
     // 2. 合并过滤后的静态点云
     PointCloud::Ptr finalStaticMap = std::make_shared<PointCloud>();
-    // *finalStaticMap += *staticFromPrimary;
-    // *finalStaticMap += *staticFromSecondary;
-    *finalStaticMap += *mPrimaryPointCloud;
-    *finalStaticMap += *mSecondaryPointCloud;
+    *finalStaticMap += *staticFromPrimary;
+    *finalStaticMap += *staticFromSecondary;
+    // *finalStaticMap += *mPrimaryPointCloud;
+    // *finalStaticMap += *mSecondaryPointCloud;
 
     // 3. 对最终地图进行下采样以统一密度
     PointCloud::Ptr downsampledMap = std::make_shared<PointCloud>();
@@ -214,7 +214,7 @@ void PointCloudMapping::filterStaticPoints(const PointCloud::Ptr& cloud_in,
             continue;
         }
 
-        if (octree_other.radiusSearch(point, searchRadius, pointIdxRadiusSearch, pointRadiusSquaredDistance, 1) > 0) {
+        if (true || octree_other.radiusSearch(point, searchRadius, pointIdxRadiusSearch, pointRadiusSquaredDistance, 1) > 0) {
             // 如果在 searchRadius 范围内找到了至少一个点，则将该点视为静态点
             cloud_out->push_back(point);
         }

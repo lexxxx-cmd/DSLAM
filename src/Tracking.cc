@@ -1450,6 +1450,11 @@ void Tracking::SetDetector(std::unique_ptr<BaseDetection> Detector)
     mpDetector = std::move(Detector);
 }
 
+void Tracking::SetTrtDetector(RTDetr *Detector)
+{
+    detector = Detector;
+}
+
 void Tracking::SetStepByStep(bool bSet)
 {
     bStepByStep = bSet;
@@ -1537,22 +1542,83 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
     mRGB = imRGB;
     mD = imD;
     // detect
-    if(mpDetector){
-        //std::chrono::steady_clock::time_point time_StartPreIMU = std::chrono::steady_clock::now();
+    // if(mpDetector){
+    //     std::chrono::steady_clock::time_point time_StartPreIMU = std::chrono::steady_clock::now();
+    //     cv::Mat InputImage;
+    //     InputImage = imRGB.clone();
+    //     cv::Mat InputImageDepth = imD.clone();
+    //     mpDetector->GetImage(InputImage);
+    //     mpDetector->GetImageDep(InputImageDepth);
+    //     mpDetector->Detect();
+    //     std::chrono::steady_clock::time_point time_EndPreIMU = std::chrono::steady_clock::now();
+    //     double timePreImu = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndPreIMU - time_StartPreIMU).count();
+    //     std::cout << "timePreImu = " << timePreImu << std::endl;
+    //     mpORBextractorLeft->allDelete = mpDetector->allDelete;
+    //     mpORBextractorLeft->mvDynamicArea = mpDetector->mvDynamicArea;
+    //     cv::Mat refined_mask;
+    //     // 进行开运算去除噪点
+    //     cv::morphologyEx(mpDetector->mMask, refined_mask, cv::MORPH_OPEN, 
+    //                     getStructuringElement(cv::MORPH_RECT, cv::Size(9,9)));
+    //     // 进行闭运算填充小洞
+    //     cv::morphologyEx(refined_mask, refined_mask, cv::MORPH_CLOSE, 
+    //                     getStructuringElement(cv::MORPH_RECT, cv::Size(9,9)));
+    //     mpORBextractorLeft->mMask = refined_mask;
+    //     mpORBextractorLeft->mvMaskWindow.push(mpORBextractorLeft->mMask);
+    //     if(mpORBextractorLeft->mvMaskWindow.size() > 3) {
+    //         mpORBextractorLeft->mvMaskWindow.pop();
+    //     }
+    //     /*
+    //     cv::Mat tmpMask = getStaticMaskFromLF();
+    //     mpORBextractorLeft->mvStaticMaskWindows.push(tmpMask);
+    //     if(mpORBextractorLeft->mvStaticMaskWindows.size() > 2) {
+    //             mpORBextractorLeft->mvStaticMaskWindows.pop();
+    //     }
+    //     */
+
+        
+    //     cv::Mat imgWithMask;
+    //     cv::Mat colorMask = cv::Mat::zeros(mpDetector->mMask.size(), CV_8UC3);
+    //     // cv::Mat colorSMask = cv::Mat::zeros(mpDetector->mMask.size(), CV_8UC3);
+    //     // //std::cout << mpDetector->mMask.size() << std::endl;
+    //     // // 将掩码区域设置为半透明的红色
+        
+    //     colorMask.setTo(cv::Scalar(0, 0, 255), mpDetector->mMask);  // BGR格式，设置为红色
+    //     // //colorSMask.setTo(cv::Scalar(0, 255, 0), mpORBextractorLeft->mvStaticMaskWindows.back());  // BGR格式，设置为红色
+
+    //     // // 混合原图和掩码
+    //     cv::addWeighted(InputImage, 0.5, colorMask, 0.5, 0, imgWithMask);
+    //     // cv::Mat imgWithSMask;
+    //     // cv::addWeighted(imgWithMask, 0.5, colorSMask, 0.5, 0, imgWithSMask);
+    //     for(auto area : mpDetector->mvDynamicArea){
+    //         cv::rectangle(imgWithMask, area, cv::Scalar(0, 255, 0), 2);
+    //     }
+
+    //     cv::imwrite("/home/lyl/YOLO_ORB_SLAM3/res/dmask.png", imgWithMask);
+        
+    //     if(mpViewer){
+    //         std::unique_lock<std::mutex> lock(mpViewer->mMutexPAFinsh);
+    //         mpViewer->mmDetectMap = mpDetector->mmDetectMap;
+    //     }
+    //     mpDetector->mvDynamicArea.clear();
+    //     mpDetector->mmDetectMap.clear();
+    // }
+    // trtdetect
+    if(detector){
+        std::chrono::steady_clock::time_point time_StartPreIMU = std::chrono::steady_clock::now();
         cv::Mat InputImage;
         InputImage = imRGB.clone();
         cv::Mat InputImageDepth = imD.clone();
-        mpDetector->GetImage(InputImage);
-        mpDetector->GetImageDep(InputImageDepth);
-        mpDetector->Detect();
-        //std::chrono::steady_clock::time_point time_EndPreIMU = std::chrono::steady_clock::now();
-        //double timePreImu = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndPreIMU - time_StartPreIMU).count();
-        //std::cout << "timePreImu = " << timePreImu << std::endl;
-        mpORBextractorLeft->allDelete = mpDetector->allDelete;
-        mpORBextractorLeft->mvDynamicArea = mpDetector->mvDynamicArea;
+        auto result = detector->infer(InputImage, 0.75f);
+        std::chrono::steady_clock::time_point time_EndPreIMU = std::chrono::steady_clock::now();
+        double timePreImu = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndPreIMU - time_StartPreIMU).count();
+        std::cout << "timePreImu = " << timePreImu <<"size: "<< result.size()<< std::endl;
+        cv::Mat mMask = cv::Mat::zeros(mRGB.rows, mRGB.cols, CV_8UC1);
+        mpORBextractorLeft->allDelete = RTDetr::draw(InputImage, mMask, InputImageDepth, result);
+        // cv::imwrite("/home/lyl/YOLO_ORB_SLAM3/res/dmask.png", InputImage);
+        mpORBextractorLeft->mvDynamicArea = detector->mvDynamicArea;
         cv::Mat refined_mask;
         // 进行开运算去除噪点
-        cv::morphologyEx(mpDetector->mMask, refined_mask, cv::MORPH_OPEN, 
+        cv::morphologyEx(mMask, refined_mask, cv::MORPH_OPEN, 
                         getStructuringElement(cv::MORPH_RECT, cv::Size(9,9)));
         // 进行闭运算填充小洞
         cv::morphologyEx(refined_mask, refined_mask, cv::MORPH_CLOSE, 
@@ -1562,40 +1628,23 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
         if(mpORBextractorLeft->mvMaskWindow.size() > 3) {
             mpORBextractorLeft->mvMaskWindow.pop();
         }
-        /*
-        cv::Mat tmpMask = getStaticMaskFromLF();
-        mpORBextractorLeft->mvStaticMaskWindows.push(tmpMask);
-        if(mpORBextractorLeft->mvStaticMaskWindows.size() > 2) {
-                mpORBextractorLeft->mvStaticMaskWindows.pop();
-        }
-        */
-
         
         cv::Mat imgWithMask;
-        cv::Mat colorMask = cv::Mat::zeros(mpDetector->mMask.size(), CV_8UC3);
-        // cv::Mat colorSMask = cv::Mat::zeros(mpDetector->mMask.size(), CV_8UC3);
-        // //std::cout << mpDetector->mMask.size() << std::endl;
-        // // 将掩码区域设置为半透明的红色
+        cv::Mat colorMask = cv::Mat::zeros(mMask.size(), CV_8UC3);
         
-        colorMask.setTo(cv::Scalar(0, 0, 255), mpDetector->mMask);  // BGR格式，设置为红色
-        // //colorSMask.setTo(cv::Scalar(0, 255, 0), mpORBextractorLeft->mvStaticMaskWindows.back());  // BGR格式，设置为红色
-
-        // // 混合原图和掩码
+        colorMask.setTo(cv::Scalar(0, 0, 255), mMask);  // BGR格式，设置为红色
+        
         cv::addWeighted(InputImage, 0.5, colorMask, 0.5, 0, imgWithMask);
-        // cv::Mat imgWithSMask;
-        // cv::addWeighted(imgWithMask, 0.5, colorSMask, 0.5, 0, imgWithSMask);
-        for(auto area : mpDetector->mvDynamicArea){
-            cv::rectangle(imgWithMask, area, cv::Scalar(0, 255, 0), 2);
-        }
+
 
         cv::imwrite("/home/lyl/YOLO_ORB_SLAM3/res/dmask.png", imgWithMask);
         
-        if(mpViewer){
-            std::unique_lock<std::mutex> lock(mpViewer->mMutexPAFinsh);
-            mpViewer->mmDetectMap = mpDetector->mmDetectMap;
-        }
-        mpDetector->mvDynamicArea.clear();
-        mpDetector->mmDetectMap.clear();
+        // if(mpViewer){
+        //     std::unique_lock<std::mutex> lock(mpViewer->mMutexPAFinsh);
+        //     mpViewer->mmDetectMap = mpDetector->mmDetectMap;
+        // }
+        // mpDetector->mvDynamicArea.clear();
+        // mpDetector->mmDetectMap.clear();
     }
     if(mImGray.channels()==3)
     {

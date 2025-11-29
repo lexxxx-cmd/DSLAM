@@ -45,6 +45,7 @@
 #include "BaseDetector.h"
 #include "DetectorFactory.hpp"
 #include "PointCloud.h"
+#include "RTdetr_opencv.h"
 //#include "RTDETRDetector.h"
 
 namespace ORB_SLAM3
@@ -278,6 +279,7 @@ private:
 
     //DETRDetector* mpDetectorDETR;
     std::unique_ptr<BaseDetection> mpDetector;
+    RTDetr* detector;
 
 };
 
