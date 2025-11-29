@@ -44,7 +44,11 @@ find_package(OpenCV 4.2)
 if(NOT OpenCV_FOUND)
     message(FATAL_ERROR "OpenCV > 4.4 not found.")
 endif()
-
+if(NOT OpenCV_CUDA_VERSION)
+    message(FATAL_ERROR "未检测到支持 CUDA 的 OpenCV 构建。请重新编译 OpenCV 并设置 -DWITH_CUDA=ON")
+else()
+    message(STATUS "Found OpenCV CUDA Version: ${OpenCV_CUDA_VERSION}")
+endif()
 MESSAGE("OPENCV VERSION:")
 MESSAGE(${OpenCV_VERSION})
 
@@ -54,6 +58,63 @@ find_package(Pangolin REQUIRED)
 find_package(realsense2)
 #set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} "/mnt/workspace/YOLO_ORB_SLAM3/RTDETRTest/Thirdparty/libtorch")
 find_package(Torch REQUIRED)
+find_package(CUDAToolkit REQUIRED)
+add_definitions(-DTRT_10)
+# 1. 查找 TensorRT 头文件路径
+find_path(TENSORRT_INCLUDE_DIR
+    NAMES NvInfer.h
+    PATHS /usr/include /usr/include/x86_64-linux-gnu # 增加可能的搜索路径
+)
+
+# 2. 查找核心库文件
+find_library(TENSORRT_INFER_LIBRARY
+    NAMES nvinfer
+)
+
+# 3. 查找 ONNX 解析器库文件
+find_library(TENSORRT_ONNX_PARSER_LIBRARY
+    NAMES nvonnxparser
+)
+
+# 可选：查找插件库（RTDETR可能需要）
+find_library(TENSORRT_PLUGIN_LIBRARY
+    NAMES nvinfer_plugin
+)
+
+# 4. 检查是否找到所有必需文件
+if (TENSORRT_INCLUDE_DIR AND TENSORRT_INFER_LIBRARY AND TENSORRT_ONNX_PARSER_LIBRARY)
+    message(STATUS "Found TensorRT Include: ${TENSORRT_INCLUDE_DIR}")
+    message(STATUS "Found TensorRT Infer Lib: ${TENSORRT_INFER_LIBRARY}")
+    
+    # 5. 添加头文件路径
+    include_directories(${TENSORRT_INCLUDE_DIR})
+
+    # 6. 定义链接库变量
+    set(RTDETR_TENSORRT_LIBRARIES 
+        ${TENSORRT_INFER_LIBRARY}
+        ${TENSORRT_ONNX_PARSER_LIBRARY}
+        ${TENSORRT_PLUGIN_LIBRARY} # 包含插件库
+    )
+else()
+    message(FATAL_ERROR "TensorRT libraries or headers not found. Check if libnvinfer-dev and libnvonnxparser-dev are installed.")
+endif()
+
+
+find_package(PCL 1.12 REQUIRED)
+add_library(PointCloudMapper STATIC
+        src/PointCloud.cpp
+)
+set_target_properties(PointCloudMapper PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(PointCloudMapper PUBLIC
+        ${PCL_INCLUDE_DIRS}
+        ${PROJECT_SOURCE_DIR}/include
+        ${EIGEN3_INCLUDE_DIR}
+        ${OPENCV_INCLUDE_DIR}
+)
+target_compile_definitions(PointCloudMapper PUBLIC
+        ${PCL_DEFINITIONS}
+)
+target_link_libraries(PointCloudMapper PUBLIC ${PCL_LIBRARIES} ${OpenCV_LIBS})
 
 include_directories(
         ${PROJECT_SOURCE_DIR}
@@ -63,6 +124,7 @@ include_directories(
         ${EIGEN3_INCLUDE_DIR}
         ${Pangolin_INCLUDE_DIRS}
         ${TORCH_INCLUDE_DIRS}
+        ${CUDAToolkit_INCLUDE_DIRS}
 )
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
@@ -98,6 +160,7 @@ add_library(${PROJECT_NAME} SHARED
         src/Settings.cc
         src/YoloDetect.cpp
         src/YRTDETRDetector.cpp
+        src/RTdetr_opencv.cpp
         include/System.h
         include/Tracking.h
         include/LocalMapping.h
@@ -131,11 +194,12 @@ add_library(${PROJECT_NAME} SHARED
         include/BaseDetector.h
         include/DetectorFactory.hpp
         include/YRTDETRDetector.h
+        include/RTdetr_opencv.h
         include/Common.hpp)
 
 add_subdirectory(Thirdparty/g2o)
-
-target_link_libraries(${PROJECT_NAME}
+target_link_directories(${PROJECT_NAME} PUBLIC ${CUDAToolkit_LIBRARY_DIR})
+target_link_libraries(${PROJECT_NAME} PUBLIC
         ${OpenCV_LIBS}
         ${EIGEN3_LIBS}
         ${Pangolin_LIBRARIES}
@@ -144,7 +208,10 @@ target_link_libraries(${PROJECT_NAME}
         ${TORCH_LIBRARIES}
         -lboost_serialization
         -lcrypto
-        )
+        PointCloudMapper
+        ${RTDETR_TENSORRT_LIBRARIES}
+        cudart
+    )
 
 # If RealSense SDK is found the library is added and its examples compiled
 if(realsense2_FOUND)
@@ -164,7 +231,7 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/Examples/RGB-D)
 
 add_executable(rgbd_tum
         Examples/RGB-D/rgbd_tum.cc)
-target_link_libraries(rgbd_tum ${PROJECT_NAME})
+target_link_libraries(rgbd_tum ${PROJECT_NAME} PointCloudMapper)
 
 if(realsense2_FOUND)
     add_executable(rgbd_realsense_D435i

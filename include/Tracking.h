@@ -47,6 +47,8 @@
 #include "YRTDETRDetector.h"
 #include "BaseDetector.h"
 #include "DetectorFactory.hpp"
+#include "PointCloud.h"
+#include "RTdetr_opencv.h" 
 
 
 namespace ORB_SLAM3
@@ -70,6 +72,8 @@ public:
 
     ~Tracking();
 
+    void SetPointCloudMapper(PointCloudMapping* pPCM);
+
     // Parse the config file
     bool ParseCamParamFile(cv::FileStorage &fSettings);
     bool ParseORBParamFile(cv::FileStorage &fSettings);
@@ -87,6 +91,7 @@ public:
     void SetLoopClosing(LoopClosing* pLoopClosing);
     void SetViewer(Viewer* pViewer);
     void SetDetector(std::unique_ptr<BaseDetection> Detector);
+    void SetTrtDetector(RTDetr *Detector);
     void SetStepByStep(bool bSet);
     bool GetStepByStep();
 
@@ -282,6 +287,9 @@ protected:
     //Other Thread Pointers
     LocalMapping* mpLocalMapper;
     LoopClosing* mpLoopClosing;
+    PointCloudMapping* mpPointCloudMapper;
+    cv::Mat mRGB;
+    cv::Mat mD;
 
     //ORB
     ORBextractor* mpORBextractorLeft, *mpORBextractorRight;
@@ -313,6 +321,7 @@ protected:
     //YoloDetection* mpDetectorYOLO;
     //DETRDetector* mpDetectorDETR;
     std::unique_ptr<BaseDetection> mpDetector;
+    RTDetr* detector;
 
     //Atlas
     Atlas* mpAtlas;

@@ -24,6 +24,7 @@
 #include<opencv2/core/core.hpp>
 
 #include<System.h>
+#include <pcl/io/pcd_io.h>
 
 using namespace std;
 
@@ -99,20 +100,16 @@ int main(int argc, char **argv)
             cv::resize(imD, imD, cv::Size(width, height));
         }
 
-#ifdef COMPILEDWITHC14
+
         std::chrono::steady_clock::time_point t1 = std::chrono::steady_clock::now();
-#else
-        std::chrono::monotonic_clock::time_point t1 = std::chrono::monotonic_clock::now();
-#endif
+
 
         // Pass the image to the SLAM system
         SLAM.TrackRGBD(imRGB,imD,tframe);
 
-#ifdef COMPILEDWITHC14
+
         std::chrono::steady_clock::time_point t2 = std::chrono::steady_clock::now();
-#else
-        std::chrono::monotonic_clock::time_point t2 = std::chrono::monotonic_clock::now();
-#endif
+
 
         double ttrack= std::chrono::duration_cast<std::chrono::duration<double> >(t2 - t1).count();
 
@@ -147,6 +144,12 @@ int main(int argc, char **argv)
     SLAM.SaveTrajectoryTUM(string(argv[5]) + "CameraTrajectory.txt");
     SLAM.SaveKeyFrameTrajectoryTUM(string(argv[5]) + "KeyFrameTrajectory.txt");   
 
+    cout << "Saving final static map..." << endl;
+    PointCloudMapping::PointCloud::Ptr finalMap = SLAM.GetPointCloudMap();
+    
+    // 使用PCL库函数保存点云
+    pcl::io::savePCDFileBinary("final_static_map.pcd", *finalMap);
+    
     return 0;
 }
 

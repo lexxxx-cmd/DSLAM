@@ -55,6 +55,7 @@ RTDETRTest/Thirdparty/*
 KeyFrameTrajectory.txt
 CameraTrajectory.txt
 TrajSave/tum/*/*
+TrajSave/bonn/*
 TrajSave/kitti/*/*
 *.torchscript
 kf_*.txt
@@ -95,3 +96,20 @@ borrar/*
 
 */ExecMean.txt
 Examples_old/*
+include/detr.h
+src/detr.cpp
+motion_mask.png
+.vscode/launch.json
+final_static_map.pcd
+*.jpg
+*.png
+*.engine
+*.onnx
+
+TrajSave/bonn/balloon/thisCameraTrajectory.txt
+TrajSave/bonn/crowd/thisCameraTrajectory.txt
+TrajSave/bonn/moving_nonobstructing_box/thisCameraTrajectory.txt
+TrajSave/bonn/moving_obstructing_box/thisCameraTrajectory.txt
+TrajSave/bonn/person_tracking/thisCameraTrajectory.txt
+TrajSave/bonn/placing_nonobstructing_box/thisCameraTrajectory.txt
+.vscode/launch.json

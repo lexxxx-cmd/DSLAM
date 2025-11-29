@@ -174,6 +174,7 @@ private:
  * 非常适合在ORB-SLAM3中作为全局唯一的特征区域静态性指导。
  */
 class StaticProbabilityGrid {
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 public:
     // 删除拷贝构造和赋值操作，确保该类不会被复制。
     StaticProbabilityGrid(const StaticProbabilityGrid&) = delete;

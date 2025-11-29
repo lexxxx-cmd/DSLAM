@@ -190,6 +190,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     
     */
     mpDetector = DetectorFactory::createDetector(settings_->GetDetector());
+    detector = new RTDetr("/home/lyl/YOLO_ORB_SLAM3/model.engine");
     
 
     //Create Drawers. These are used by the Viewer
@@ -203,7 +204,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
                              mpAtlas, mpKeyFrameDatabase, strSettingsFile, mSensor, settings_, strSequence);
 
     mpTracker->SetDetector(std::move(mpDetector));
-    //mpTracker->SetDetector(mpDetectorDETR);
+    mpTracker->SetTrtDetector(detector);
 
     //Initialize the Local Mapping thread and launch
     mpLocalMapper = new LocalMapping(this, mpAtlas, mSensor==MONOCULAR || mSensor==IMU_MONOCULAR,
@@ -226,6 +227,14 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     // mSensor!=MONOCULAR && mSensor!=IMU_MONOCULAR
     mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR, activeLC); // mSensor!=MONOCULAR);
     mptLoopClosing = new thread(&ORB_SLAM3::LoopClosing::Run, mpLoopCloser);
+
+    double resolution = 0.01;
+    double blur_threshold = 400.0;
+    int batch_size = 10;
+    mpPointCloudMapper = new PointCloudMapping(resolution, blur_threshold, batch_size);
+
+    // 2. 将点云模块的指针设置给Tracking模块
+    mpTracker->SetPointCloudMapper(mpPointCloudMapper);
 
     //Set pointers between threads
     mpTracker->SetLocalMapper(mpLocalMapper);
@@ -536,6 +545,8 @@ void System::Shutdown()
 
     mpLocalMapper->RequestFinish();
     mpLoopCloser->RequestFinish();
+    if(mpPointCloudMapper)
+        mpPointCloudMapper->shutdown();
     /*if(mpViewer)
     {
         mpViewer->RequestFinish();
@@ -1328,6 +1339,11 @@ void System::SaveDebugData(const int &initIdx)
     f << fixed;
     f << mpLocalMapper->mInitTime << endl;
     f.close();
+}
+
+PointCloudMapping::PointCloud::Ptr System::GetPointCloudMap()
+{
+    return mpPointCloudMapper->assembleFinalMap();
 }
 
 
