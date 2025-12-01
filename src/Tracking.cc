@@ -1629,15 +1629,15 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
             mpORBextractorLeft->mvMaskWindow.pop();
         }
         
-        cv::Mat imgWithMask;
-        cv::Mat colorMask = cv::Mat::zeros(mMask.size(), CV_8UC3);
+        // cv::Mat imgWithMask;
+        // cv::Mat colorMask = cv::Mat::zeros(mMask.size(), CV_8UC3);
         
-        colorMask.setTo(cv::Scalar(0, 0, 255), mMask);  // BGR格式，设置为红色
+        // colorMask.setTo(cv::Scalar(0, 0, 255), mMask);  // BGR格式，设置为红色
         
-        cv::addWeighted(InputImage, 0.5, colorMask, 0.5, 0, imgWithMask);
+        // cv::addWeighted(InputImage, 0.5, colorMask, 0.5, 0, imgWithMask);
 
 
-        cv::imwrite("/home/lyl/YOLO_ORB_SLAM3/res/dmask.png", imgWithMask);
+        // cv::imwrite("/home/lyl/YOLO_ORB_SLAM3/res/dmask.png", imgWithMask);
         
         // if(mpViewer){
         //     std::unique_lock<std::mutex> lock(mpViewer->mMutexPAFinsh);

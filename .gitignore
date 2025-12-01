@@ -113,3 +113,4 @@ TrajSave/bonn/moving_obstructing_box/thisCameraTrajectory.txt
 TrajSave/bonn/person_tracking/thisCameraTrajectory.txt
 TrajSave/bonn/placing_nonobstructing_box/thisCameraTrajectory.txt
 .vscode/launch.json
+cuda_11.8.0_520.61.05_linux.run

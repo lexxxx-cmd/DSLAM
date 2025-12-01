@@ -162,6 +162,7 @@ void RTDetr::preprocessCpu(const cv::Mat& img) {
 }
 
 std::vector<Detection> RTDetr::infer(const cv::Mat& img, float confThresh) {
+    mvDynamicArea.clear();
     // 1. CPU 预处理 + GPU 上传
     preprocessCpu(img);
 

@@ -40,17 +40,12 @@ add_definitions(-w)
 LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 set(CMAKE_PREFIX_PATH ${PROJECT_SOURCE_DIR}/Thirdparty/libtorch)
 
-find_package(OpenCV 4.2)
-if(NOT OpenCV_FOUND)
-    message(FATAL_ERROR "OpenCV > 4.4 not found.")
-endif()
-if(NOT OpenCV_CUDA_VERSION)
-    message(FATAL_ERROR "未检测到支持 CUDA 的 OpenCV 构建。请重新编译 OpenCV 并设置 -DWITH_CUDA=ON")
-else()
-    message(STATUS "Found OpenCV CUDA Version: ${OpenCV_CUDA_VERSION}")
-endif()
-MESSAGE("OPENCV VERSION:")
-MESSAGE(${OpenCV_VERSION})
+
+# if(NOT OpenCV_CUDA_VERSION)
+#     message(FATAL_ERROR "未检测到支持 CUDA 的 OpenCV 构建。请重新编译 OpenCV 并设置 -DWITH_CUDA=ON")
+# else()
+#     message(STATUS "Found OpenCV CUDA Version: ${OpenCV_CUDA_VERSION}")
+# endif()
 
 
 find_package(Eigen3 3.1.0 REQUIRED)
@@ -58,52 +53,64 @@ find_package(Pangolin REQUIRED)
 find_package(realsense2)
 #set(CMAKE_PREFIX_PATH ${CMAKE_PREFIX_PATH} "/mnt/workspace/YOLO_ORB_SLAM3/RTDETRTest/Thirdparty/libtorch")
 find_package(Torch REQUIRED)
-find_package(CUDAToolkit REQUIRED)
-add_definitions(-DTRT_10)
-# 1. 查找 TensorRT 头文件路径
-find_path(TENSORRT_INCLUDE_DIR
-    NAMES NvInfer.h
-    PATHS /usr/include /usr/include/x86_64-linux-gnu # 增加可能的搜索路径
-)
+# find_package(CUDAToolkit REQUIRED)
+# add_definitions(-DTRT_10)
+# # 1. 查找 TensorRT 头文件路径
+# find_path(TENSORRT_INCLUDE_DIR
+#     NAMES NvInfer.h
+#     PATHS /usr/include /usr/include/x86_64-linux-gnu # 增加可能的搜索路径
+# )
 
-# 2. 查找核心库文件
-find_library(TENSORRT_INFER_LIBRARY
-    NAMES nvinfer
-)
+# # 2. 查找核心库文件
+# find_library(TENSORRT_INFER_LIBRARY
+#     NAMES nvinfer
+# )
 
-# 3. 查找 ONNX 解析器库文件
-find_library(TENSORRT_ONNX_PARSER_LIBRARY
-    NAMES nvonnxparser
-)
+# # 3. 查找 ONNX 解析器库文件
+# find_library(TENSORRT_ONNX_PARSER_LIBRARY
+#     NAMES nvonnxparser
+# )
 
-# 可选：查找插件库（RTDETR可能需要）
-find_library(TENSORRT_PLUGIN_LIBRARY
-    NAMES nvinfer_plugin
-)
+# # 可选：查找插件库（RTDETR可能需要）
+# find_library(TENSORRT_PLUGIN_LIBRARY
+#     NAMES nvinfer_plugin
+# )
 
-# 4. 检查是否找到所有必需文件
-if (TENSORRT_INCLUDE_DIR AND TENSORRT_INFER_LIBRARY AND TENSORRT_ONNX_PARSER_LIBRARY)
-    message(STATUS "Found TensorRT Include: ${TENSORRT_INCLUDE_DIR}")
-    message(STATUS "Found TensorRT Infer Lib: ${TENSORRT_INFER_LIBRARY}")
+# # 4. 检查是否找到所有必需文件
+# if (TENSORRT_INCLUDE_DIR AND TENSORRT_INFER_LIBRARY AND TENSORRT_ONNX_PARSER_LIBRARY)
+#     message(STATUS "Found TensorRT Include: ${TENSORRT_INCLUDE_DIR}")
+#     message(STATUS "Found TensorRT Infer Lib: ${TENSORRT_INFER_LIBRARY}")
     
-    # 5. 添加头文件路径
-    include_directories(${TENSORRT_INCLUDE_DIR})
+#     # 5. 添加头文件路径
+#     include_directories(${TENSORRT_INCLUDE_DIR})
 
-    # 6. 定义链接库变量
-    set(RTDETR_TENSORRT_LIBRARIES 
-        ${TENSORRT_INFER_LIBRARY}
-        ${TENSORRT_ONNX_PARSER_LIBRARY}
-        ${TENSORRT_PLUGIN_LIBRARY} # 包含插件库
-    )
-else()
-    message(FATAL_ERROR "TensorRT libraries or headers not found. Check if libnvinfer-dev and libnvonnxparser-dev are installed.")
+#     # 6. 定义链接库变量
+#     set(RTDETR_TENSORRT_LIBRARIES 
+#         ${TENSORRT_INFER_LIBRARY}
+#         ${TENSORRT_ONNX_PARSER_LIBRARY}
+#         ${TENSORRT_PLUGIN_LIBRARY} # 包含插件库
+#     )
+# else()
+#     message(FATAL_ERROR "TensorRT libraries or headers not found. Check if libnvinfer-dev and libnvonnxparser-dev are installed.")
+# endif()
+set(CUDA_TOOLKIT_ROOT_DIR "/usr/local/cuda-11.8")
+# 强制指定编译器，防止 CMake 自动去抓 /usr/bin/nvcc (即 CUDA 12)
+set(CMAKE_CUDA_COMPILER "${CUDA_TOOLKIT_ROOT_DIR}/bin/nvcc")
+
+enable_language(CUDA)
+set(TRT_ROOT "~/Softwares/TensorRT-10.12.0.36/")
+
+find_package(OpenCV 4.2)
+if(NOT OpenCV_FOUND)
+    message(FATAL_ERROR "OpenCV > 4.4 not found.")
 endif()
-
-
 find_package(PCL 1.12 REQUIRED)
 add_library(PointCloudMapper STATIC
         src/PointCloud.cpp
 )
+include_directories(${CUDA_TOOLKIT_ROOT_DIR}/include)
+include_directories(${TRT_ROOT}/include)
+
 set_target_properties(PointCloudMapper PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(PointCloudMapper PUBLIC
         ${PCL_INCLUDE_DIRS}
@@ -124,7 +131,7 @@ include_directories(
         ${EIGEN3_INCLUDE_DIR}
         ${Pangolin_INCLUDE_DIRS}
         ${TORCH_INCLUDE_DIRS}
-        ${CUDAToolkit_INCLUDE_DIRS}
+        #${CUDAToolkit_INCLUDE_DIRS}
 )
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
@@ -198,7 +205,9 @@ add_library(${PROJECT_NAME} SHARED
         include/Common.hpp)
 
 add_subdirectory(Thirdparty/g2o)
-target_link_directories(${PROJECT_NAME} PUBLIC ${CUDAToolkit_LIBRARY_DIR})
+#target_link_directories(${PROJECT_NAME} PUBLIC ${CUDAToolkit_LIBRARY_DIR})
+link_directories(${TRT_ROOT}/lib)
+link_directories(${CUDA_TOOLKIT_ROOT_DIR}/lib64)
 target_link_libraries(${PROJECT_NAME} PUBLIC
         ${OpenCV_LIBS}
         ${EIGEN3_LIBS}
@@ -209,8 +218,11 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
         -lboost_serialization
         -lcrypto
         PointCloudMapper
-        ${RTDETR_TENSORRT_LIBRARIES}
-        cudart
+        # ${RTDETR_TENSORRT_LIBRARIES}
+        /usr/local/cuda-11.8/lib64/libcudart.so
+        ${TRT_ROOT}/lib/libnvinfer.so
+        ${TRT_ROOT}/lib/libnvinfer_plugin.so
+        ${TRT_ROOT}/lib/libnvonnxparser.so
     )
 
 # If RealSense SDK is found the library is added and its examples compiled
