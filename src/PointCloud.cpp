@@ -3,17 +3,37 @@
 #include <algorithm>
 using PointT = pcl::PointXYZRGB;
 using PointCloud = pcl::PointCloud<PointT>;
+
+Eigen::Matrix<double,4,4> toMatrix4d(const cv::Mat &cvMat4)
+{
+    Eigen::Matrix<double,4,4> M;
+
+    M << cvMat4.at<float>(0,0), cvMat4.at<float>(0,1), cvMat4.at<float>(0,2), cvMat4.at<float>(0,3),
+         cvMat4.at<float>(1,0), cvMat4.at<float>(1,1), cvMat4.at<float>(1,2), cvMat4.at<float>(1,3),
+         cvMat4.at<float>(2,0), cvMat4.at<float>(2,1), cvMat4.at<float>(2,2), cvMat4.at<float>(2,3),
+         cvMat4.at<float>(3,0), cvMat4.at<float>(3,1), cvMat4.at<float>(3,2), cvMat4.at<float>(3,3);
+    return M;
+}
+
+Eigen::Matrix<double,4,4> toMatrix4d(const Sophus::SE3f &T)
+{
+    Eigen::Matrix<double,4,4> M = Eigen::Matrix4d::Identity();
+
+    M.block<3, 3>(0, 0) = T.rotationMatrix().cast<double>();
+    M.block<3, 1>(0, 3) = T.translation().cast<double>();
+    return M;
+}
 PointCloudMapping::PointCloudMapping(double resolution, double blurThreshold, int candidatePoolSize)
     : mResolution(resolution), mBlurThreshold(blurThreshold), mCandidatePoolSize(candidatePoolSize), mbShutdown(false) {
 
     // 初始化主次点云和八叉树
     mPrimaryPointCloud = std::make_shared<PointCloud>();
     mSecondaryPointCloud = std::make_shared<PointCloud>();
-    mPrimaryOctree = std::make_unique<pcl::octree::OctreePointCloudSearch<PointT>>(mResolution);
+    mPrimaryOctree = std::make_unique<octomap::OcTree>(mResolution);
     const double min_log_odds = -4.595; // log(0.01 / 0.99)
     const double max_log_odds =  4.595; // log(0.99 / 0.01)
    // mPrimaryOctree->setClampingThresholds(min_log_odds, max_log_odds); 
-    mSecondaryOctree = std::make_unique<pcl::octree::OctreePointCloudSearch<PointT>>(mResolution);
+    mSecondaryOctree = std::make_unique<octomap::OcTree>(mResolution);
    // mSecondaryOctree->setClampingThresholds(min_log_odds, max_log_odds);  
     mVoxelGridFilter.setLeafSize(mResolution, mResolution, mResolution);
 
@@ -93,22 +113,50 @@ void PointCloudMapping::processCandidateBatch() {
     });
     {
         const auto& frame = processingFrames[0];
+        Eigen::Matrix4f Twc = toMatrix4d(frame.mpKF->GetPoseInverse()).cast<float>();
         PointCloud::Ptr localCloud = generatePointCloud(frame.mpKF, frame.mColorImg, frame.mDepthImg);
-        *mPrimaryPointCloud += *localCloud; 
+        PointCloud::Ptr worldCloud(new PointCloud());
+        if(localCloud->width != 0){
+            pcl::transformPointCloud(*localCloud, *worldCloud, Twc);
+            *mPrimaryPointCloud += *worldCloud; 
+        }
+        if (!worldCloud->empty()) {
+            octomap::Pointcloud cloud;
+            for (const auto& p : worldCloud->points) {
+                if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z))
+                continue;
+            
+                cloud.push_back(p.x, p.y, p.z);
+            }
+            octomap::point3d sensor_origin(Twc(0, 3), Twc(1, 3),Twc(2, 3));
+            mPrimaryOctree->insertPointCloud(cloud, sensor_origin);
+            mPrimaryOctree->updateInnerOccupancy();
+        }
     }
     {
         const auto& frame = processingFrames[1];
         PointCloud::Ptr localCloud = generatePointCloud(frame.mpKF, frame.mColorImg, frame.mDepthImg);
-        *mSecondaryPointCloud += *localCloud;
+        PointCloud::Ptr worldCloud(new PointCloud());
+        Eigen::Matrix4f Twc = toMatrix4d(frame.mpKF->GetPoseInverse()).cast<float>();
+        if(localCloud->width != 0){
+            pcl::transformPointCloud(*localCloud, *worldCloud, Twc);
+            *mSecondaryPointCloud += *worldCloud;
+        }
+        if (!worldCloud->empty()) {
+            octomap::Pointcloud cloud;
+            for (const auto& p : worldCloud->points) {
+                if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z))
+                continue;
+            
+                cloud.push_back(p.x, p.y, p.z);
+            }
+            octomap::point3d sensor_origin(Twc(0, 3), Twc(1, 3),Twc(2, 3));
+            mSecondaryOctree->insertPointCloud(cloud, sensor_origin);
+            mSecondaryOctree->updateInnerOccupancy();
+        }
     }
-    if (!mPrimaryPointCloud->empty()) {
-        mPrimaryOctree->setInputCloud(mPrimaryPointCloud);
-        mPrimaryOctree->addPointsFromInputCloud();
-    }
-    if (!mSecondaryPointCloud->empty()) {
-        mSecondaryOctree->setInputCloud(mSecondaryPointCloud);
-        mSecondaryOctree->addPointsFromInputCloud();
-    }
+    
+    
 }
 
 PointCloudMapping::PointCloud::Ptr PointCloudMapping::assembleFinalMap() {
@@ -123,10 +171,10 @@ PointCloudMapping::PointCloud::Ptr PointCloudMapping::assembleFinalMap() {
     const double validationRadius = mResolution * 1.5;
 
     // 用次八叉树 M2 验证主点云 P1
-    filterStaticPoints(mPrimaryPointCloud, *mSecondaryOctree, staticFromPrimary, validationRadius);
+    filterStaticPoints(mPrimaryPointCloud, *mSecondaryOctree, staticFromPrimary);
     
     // 用主八叉树 M1 验证次点云 P2
-    filterStaticPoints(mSecondaryPointCloud, *mPrimaryOctree, staticFromSecondary, validationRadius);
+    filterStaticPoints(mSecondaryPointCloud, *mPrimaryOctree, staticFromSecondary);
 
     std::cout << "Filtering results: Static from Primary: " << staticFromPrimary->size() << "/" << mPrimaryPointCloud->size() << std::endl;
     std::cout << "Filtering results: Static from Secondary: " << staticFromSecondary->size() << "/" << mSecondaryPointCloud->size() << std::endl;
@@ -159,62 +207,82 @@ double PointCloudMapping::calculateBlurScore(const cv::Mat& image) {
 }
 
 PointCloudMapping::PointCloud::Ptr PointCloudMapping::generatePointCloud(ORB_SLAM3::KeyFrame* kf, const cv::Mat& color, const cv::Mat& depth) {
-    PointCloud::Ptr cloud(new PointCloud());
+    PointCloud::Ptr cloud_local(new PointCloud());
+    // 1. 步长设置：参考代码中使用了 +=4 进行降采样，这里设置为 2 或 4 可以平衡性能和密度
+    const int step = 1; 
+    float scale_factor = 1.0f;
+    if (depth.type() == CV_16U) {
+        scale_factor = 5000.0f;
+    }
 
-    for (int m = 0; m < depth.rows; m++) {
-        for (int n = 0; n < depth.cols; n++) {
-            float d = depth.ptr<float>(m)[n];
-            
+    for (int m = 0; m < depth.rows; m += step) {
+        // 提前获取行指针，比 .at() 快很多
+        const unsigned short* depth_ptr_16u = (depth.type() == CV_16U) ? depth.ptr<unsigned short>(m) : nullptr;
+        const float* depth_ptr_32f = (depth.type() == CV_32F) ? depth.ptr<float>(m) : nullptr;
+        const uchar* color_ptr = color.ptr<uchar>(m);
 
-            if (d < 0.1 || d > 10.0) {
+        for (int n = 0; n < depth.cols; n += step) {
+            float d = 0.0f;
+            if (depth_ptr_16u) {
+                d = depth_ptr_16u[n] / scale_factor; // 毫米 -> 米
+            } else if (depth_ptr_32f) {
+                d = depth_ptr_32f[n];
+            }
+
+            // 2. 深度过滤：参考代码使用了更严格的 6.0m 上限，有助于减少远处的噪声层
+            if (d < 0.1 || d > 6.0) {
                 continue;
             }
-            if(kf->mMask.at<uchar>(m, n) == 0) {
+            // 检查掩码（如果你的逻辑需要）
+            if (!kf->mMask.empty() && kf->mMask.at<uchar>(m, n) == 0) {
                 PointT p;
                 p.z = d;
                 p.x = (n - kf->cx) * p.z / kf->fx;
                 p.y = (m - kf->cy) * p.z / kf->fy;
 
-                p.b = color.at<cv::Vec3b>(m, n)[0];
-                p.g = color.at<cv::Vec3b>(m, n)[1];
-                p.r = color.at<cv::Vec3b>(m, n)[2];
-                cloud->push_back(p);
+                // 3. 颜色赋值：参考代码的指针写法
+                p.b = color_ptr[n * 3];
+                p.g = color_ptr[n * 3 + 1];
+                p.r = color_ptr[n * 3 + 2];
+                
+                cloud_local->push_back(p);
+            }
+            // 如果没有掩码逻辑，直接通过：
+            else if (kf->mMask.empty()) {
+                PointT p;
+                p.z = d;
+                p.x = (n - kf->cx) * p.z / kf->fx;
+                p.y = (m - kf->cy) * p.z / kf->fy;
+                p.b = color_ptr[n * 3];
+                p.g = color_ptr[n * 3 + 1];
+                p.r = color_ptr[n * 3 + 2];
+                cloud_local->push_back(p);
             }
         }
     }
-    if (cloud->empty()) {
-        // 返回一个空的 world cloud，保持接口一致性
-        return PointCloud::Ptr(new PointCloud()); 
-    }
-    PointCloud::Ptr cloud_world(new PointCloud());
-    Eigen::Isometry3d T = ORB_SLAM3::Converter::toSE3Quat(kf->GetPose());
-    pcl::transformPointCloud(*cloud, *cloud_world, T.matrix());
 
-    auto center = kf->GetCameraCenter();
-    cloud_world->sensor_origin_ = Eigen::Vector4f(center(0,0), center(1,0), center(2,0), 1.0f);
-    cloud_world->sensor_orientation_ = Eigen::Quaternionf(T.rotation().cast<float>());
+    cloud_local->height = 1;
+    cloud_local->width = cloud_local->points.size();
+    cloud_local->is_dense = true;
 
-    return cloud_world;
+    return cloud_local; // 返回的是相机坐标系的局部点云
 }
 
 void PointCloudMapping::filterStaticPoints(const PointCloud::Ptr& cloud_in, 
-                            pcl::octree::OctreePointCloudSearch<PointT>& octree_other, 
-                            PointCloud::Ptr& cloud_out,
-                            double searchRadius) {
+                            octomap::OcTree& octree_other, 
+                            PointCloud::Ptr& cloud_out
+                            ) {
     cloud_out->clear();
 
     cloud_out->points.reserve(cloud_in->size());
-
-    std::vector<int> pointIdxRadiusSearch;
-    std::vector<float> pointRadiusSquaredDistance;
 
     for (const auto& point : cloud_in->points) {
         // 检查点是否有效
         if (!pcl::isFinite(point)) {
             continue;
         }
-
-        if (true || octree_other.radiusSearch(point, searchRadius, pointIdxRadiusSearch, pointRadiusSquaredDistance, 1) > 0) {
+        octomap::OcTreeNode* node = octree_other.search(point.x ,point.y, point.z);
+        if (node && octree_other.isNodeOccupied(node)) {
             // 如果在 searchRadius 范围内找到了至少一个点，则将该点视为静态点
             cloud_out->push_back(point);
         }

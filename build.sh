@@ -36,5 +36,5 @@ echo "Configuring and building YOLO_ORB_SLAM3 ..."
 
 mkdir build
 cd build
-cmake .. -DCMAKE_BUILD_TYPE=Debug 
+cmake .. -DCMAKE_BUILD_TYPE=Release 
 make rgbd_tum -j${nproc}

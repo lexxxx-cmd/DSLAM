@@ -1195,9 +1195,9 @@ namespace ORB_SLAM3
         int offset = 0;
         //Modified for speeding up stereo fisheye matching
         int monoIndex = 0, stereoIndex = nkeypoints-1;
-        cv::Mat tmp = image.clone();
-        cv::Mat rgb;
-        cv::cvtColor(tmp, rgb, cv::COLOR_GRAY2BGR);
+        // cv::Mat tmp = image.clone();
+        // cv::Mat rgb;
+        // cv::cvtColor(tmp, rgb, cv::COLOR_GRAY2BGR);
         Eigen::Matrix<float, 12, 16> observation_matrix = Eigen::Matrix<float, 12, 16>::Zero();
         for (int level = 0; level < nlevels; ++level)
         {
@@ -1244,9 +1244,9 @@ namespace ORB_SLAM3
                     const int iy = keypoint->pt.y / 40;
                     const int ix = keypoint->pt.x / 40;
                     observation_matrix(iy, ix) = 1;
-                    cv::circle(rgb, keypoint->pt, 3, cv::Scalar(0, 255, 0), -1);
+                    //cv::circle(rgb, keypoint->pt, 3, cv::Scalar(0, 255, 0), -1);
                 }else{
-                    cv::circle(rgb, keypoint->pt, 3, cv::Scalar(0, 0, 255), -1);
+                    //cv::circle(rgb, keypoint->pt, 3, cv::Scalar(0, 0, 255), -1);
                 }
             }
         }
@@ -1255,8 +1255,8 @@ namespace ORB_SLAM3
             mvLastImagePyramid[i] = mvImagePyramid[i].clone();
         }
         //cout << "[ORBextractor]: extracted " << _keypoints.size() << " KeyPoints" << endl;
-        cv::imwrite("/home/lyl/YOLO_ORB_SLAM3/res/kps.png", rgb);
-        StaticProbabilityGrid::saveVisualization("/home/lyl/YOLO_ORB_SLAM3/res/spMat.png");
+        //cv::imwrite("/home/lyl/YOLO_ORB_SLAM3/res/kps.png", rgb);
+        //StaticProbabilityGrid::saveVisualization("/home/lyl/YOLO_ORB_SLAM3/res/spMat.png");
         return monoIndex;
     }
     //感觉还能加一个上一帧辅助判断

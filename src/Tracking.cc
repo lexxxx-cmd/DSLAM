@@ -1605,15 +1605,12 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
     // trtdetect
     if(detector){
         std::chrono::steady_clock::time_point time_StartPreIMU = std::chrono::steady_clock::now();
-        cv::Mat InputImage;
-        InputImage = imRGB.clone();
-        cv::Mat InputImageDepth = imD.clone();
-        auto result = detector->infer(InputImage, 0.75f);
+        auto result = detector->infer(imRGB, 0.75f);
         std::chrono::steady_clock::time_point time_EndPreIMU = std::chrono::steady_clock::now();
         double timePreImu = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndPreIMU - time_StartPreIMU).count();
-        std::cout << "timePreImu = " << timePreImu <<"size: "<< result.size()<< std::endl;
+        //std::cout << "timePreImu = " << timePreImu <<"size: "<< result.size()<< std::endl;
         cv::Mat mMask = cv::Mat::zeros(mRGB.rows, mRGB.cols, CV_8UC1);
-        mpORBextractorLeft->allDelete = RTDetr::draw(InputImage, mMask, InputImageDepth, result);
+        mpORBextractorLeft->allDelete = RTDetr::draw(imRGB, mMask, imD, result);
         // cv::imwrite("/home/lyl/YOLO_ORB_SLAM3/res/dmask.png", InputImage);
         mpORBextractorLeft->mvDynamicArea = detector->mvDynamicArea;
         cv::Mat refined_mask;
@@ -3503,9 +3500,9 @@ void Tracking::CreateNewKeyFrame()
         // 假设mCurrentFrame.imColor和mCurrentFrame.imDepth是当前帧的彩色和深度图
         // 注意：ORB-SLAM3原生处理的是灰度图，你需要确保能获取到对应的彩色图和深度图
         // 如果你的系统是RGB-D模式，mCurrentFrame应该已经包含了这些信息
-        if(!mRGB.empty() && !mD.empty())
+        if(!mRGB.empty() && !imD.empty())
         {
-            mpPointCloudMapper->insertKeyFrame(pKF, mRGB, mD);
+            mpPointCloudMapper->insertKeyFrame(pKF, mRGB, imD);
         }
     }
 }

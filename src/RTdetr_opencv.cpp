@@ -210,13 +210,13 @@ std::vector<Detection> RTDetr::infer(const cv::Mat& img, float confThresh) {
     return results;
 }
 
-bool RTDetr::draw(cv::Mat& img, cv::Mat &mMask, const cv::Mat &mDepth, const std::vector<Detection>& objects) {
+bool RTDetr::draw(const cv::Mat& img, cv::Mat &mMask, const cv::Mat &mDepth, const std::vector<Detection>& objects) {
     int cnt = 0;
     bool fill = false;
     for (const auto& obj : objects) {
-        cv::rectangle(img, cv::Point(obj.bbox[0], obj.bbox[1]), cv::Point(obj.bbox[2], obj.bbox[3]), cv::Scalar(255, 255, 0), 2);
-        std::string label = std::to_string(obj.classId) + ": " + std::to_string(obj.conf).substr(0, 4);
-        cv::putText(img, label, cv::Point(obj.bbox[0], obj.bbox[1] - 5), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 0), 1);
+        // cv::rectangle(img, cv::Point(obj.bbox[0], obj.bbox[1]), cv::Point(obj.bbox[2], obj.bbox[3]), cv::Scalar(255, 255, 0), 2);
+        // std::string label = std::to_string(obj.classId) + ": " + std::to_string(obj.conf).substr(0, 4);
+        // cv::putText(img, label, cv::Point(obj.bbox[0], obj.bbox[1] - 5), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 0), 1);
         // 确保输入框在图像范围内
         cv::Rect2i DynamicArea(obj.bbox[0], obj.bbox[1],obj.bbox[2]-obj.bbox[0], obj.bbox[3]-obj.bbox[1]);
         cv::Rect2i box = DynamicArea & cv::Rect(0, 0, mDepth.cols, mDepth.rows);

@@ -104,6 +104,7 @@ find_package(OpenCV 4.2)
 if(NOT OpenCV_FOUND)
     message(FATAL_ERROR "OpenCV > 4.4 not found.")
 endif()
+find_package(octomap REQUIRED)
 find_package(PCL 1.12 REQUIRED)
 add_library(PointCloudMapper STATIC
         src/PointCloud.cpp
@@ -131,6 +132,7 @@ include_directories(
         ${EIGEN3_INCLUDE_DIR}
         ${Pangolin_INCLUDE_DIRS}
         ${TORCH_INCLUDE_DIRS}
+        ${OCTOMAP_INCLUDE_DIRS}
         #${CUDAToolkit_INCLUDE_DIRS}
 )
 
@@ -223,6 +225,7 @@ target_link_libraries(${PROJECT_NAME} PUBLIC
         ${TRT_ROOT}/lib/libnvinfer.so
         ${TRT_ROOT}/lib/libnvinfer_plugin.so
         ${TRT_ROOT}/lib/libnvonnxparser.so
+        ${OCTOMAP_LIBRARIES}
     )
 
 # If RealSense SDK is found the library is added and its examples compiled

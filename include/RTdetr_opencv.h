@@ -33,7 +33,7 @@ public:
     std::vector<Detection> infer(const cv::Mat& img, float confThresh = 0.45f);
 
     // 辅助函数：绘制结果
-    static bool draw(cv::Mat& img, cv::Mat &mMask, const cv::Mat &mDepth, const std::vector<Detection>& objects);
+    static bool draw(const cv::Mat& img, cv::Mat &mMask, const cv::Mat &mDepth, const std::vector<Detection>& objects);
     std::vector<cv::Rect2i> mvDynamicArea;
 private:
     void initEngine(const std::string& modelPath);
