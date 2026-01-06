@@ -1538,9 +1538,9 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
     
     mImGray = imRGB;
     cv::Mat imDepth = imD;
-    mpORBextractorLeft->mDepth = imD;
-    mRGB = imRGB;
-    mD = imD;
+    imD.copyTo(mpORBextractorLeft->mDepth);
+    imRGB.copyTo(mRGB);
+    imD.copyTo(mD);
     // detect
     // if(mpDetector){
     //     std::chrono::steady_clock::time_point time_StartPreIMU = std::chrono::steady_clock::now();
@@ -1611,6 +1611,8 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
         //std::cout << "timePreImu = " << timePreImu <<"size: "<< result.size()<< std::endl;
         cv::Mat mMask = cv::Mat::zeros(mRGB.rows, mRGB.cols, CV_8UC1);
         mpORBextractorLeft->allDelete = RTDetr::draw(imRGB, mMask, imD, result);
+        std::chrono::steady_clock::time_point time_EndMask = std::chrono::steady_clock::now();
+        double timeenddraw = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndMask - time_EndPreIMU).count();
         // cv::imwrite("/home/lyl/YOLO_ORB_SLAM3/res/dmask.png", InputImage);
         mpORBextractorLeft->mvDynamicArea = detector->mvDynamicArea;
         cv::Mat refined_mask;
@@ -1620,6 +1622,9 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
         // 进行闭运算填充小洞
         cv::morphologyEx(refined_mask, refined_mask, cv::MORPH_CLOSE, 
                         getStructuringElement(cv::MORPH_RECT, cv::Size(9,9)));
+        std::chrono::steady_clock::time_point time_Endrefine = std::chrono::steady_clock::now();
+        double timerefine = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_Endrefine - time_EndMask).count();
+        //std::cout << "timeinfer = " << timePreImu << " timedraw = " << timeenddraw << " timerefine = " << timerefine<< std::endl;
         mpORBextractorLeft->mMask = refined_mask;
         mpORBextractorLeft->mvMaskWindow.push(mpORBextractorLeft->mMask);
         if(mpORBextractorLeft->mvMaskWindow.size() > 3) {
@@ -1674,12 +1679,14 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
         OpticalFlowUtils::calculateMotionMask(mImgWin.front(), mImGray);
         //std::cout << "Calculation finished." << std::endl;
     }
-    
+    std::chrono::steady_clock::time_point time_StartExt = std::chrono::steady_clock::now();
     if (mSensor == System::RGBD)
         mCurrentFrame = Frame(mImGray,imDepth,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,mpCamera);
     else if(mSensor == System::IMU_RGBD)
         mCurrentFrame = Frame(mImGray,imDepth,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth,mpCamera,&mLastFrame,*mpImuCalib);
-
+    std::chrono::steady_clock::time_point time_EndExt = std::chrono::steady_clock::now();
+    double timeExt = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndExt - time_StartExt).count();
+    // std::cout << "timeExt = " << timeExt << std::endl;
     mCurrentFrame.prob_map = StaticProbabilityGrid::getProbabilityGrid();
     mCurrentFrame.mvKeys3D.clear();
     for(int i=0; i<mCurrentFrame.N; i++)
@@ -1708,6 +1715,9 @@ Sophus::SE3f Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, co
     if (mImgWin.size() >= 3) {
         mImgWin.pop();
     }
+    std::chrono::steady_clock::time_point time_EndTtrack = std::chrono::steady_clock::now();
+    double timetrack = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndTtrack - time_EndExt).count();
+    // std::cout << "timetrack = " << timetrack << std::endl;
     mImgWin.push(mImGray);
     mpORBextractorLeft->mLKMask = OpticalFlowUtils::getMask();
     return mCurrentFrame.GetPose();
@@ -3497,12 +3507,9 @@ void Tracking::CreateNewKeyFrame()
     // 检查pKF和点云模块指针是否有效
     if(pKF && mpPointCloudMapper)
     {
-        // 假设mCurrentFrame.imColor和mCurrentFrame.imDepth是当前帧的彩色和深度图
-        // 注意：ORB-SLAM3原生处理的是灰度图，你需要确保能获取到对应的彩色图和深度图
-        // 如果你的系统是RGB-D模式，mCurrentFrame应该已经包含了这些信息
-        if(!mRGB.empty() && !imD.empty())
+        if(!mRGB.empty() && !mD.empty())
         {
-            mpPointCloudMapper->insertKeyFrame(pKF, mRGB, imD);
+            mpPointCloudMapper->insertKeyFrame(pKF, mRGB, mD);
         }
     }
 }

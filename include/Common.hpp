@@ -172,7 +172,7 @@ public:
 
     static void calculateMotionMask(const cv::Mat& prevFrame, const cv::Mat& nextFrame, double magnitudeThreshold = 4.0, int num_bins = 256, int offset = 10) {
         auto& mask = getMask();
-        std::chrono::steady_clock::time_point time_StartPreIMU = std::chrono::steady_clock::now();
+        //std::chrono::steady_clock::time_point time_StartPreIMU = std::chrono::steady_clock::now();
         // mask 重置逻辑移到最后或根据需要重置，为了性能，这里我们先不管 CPU mask 的初始化，直接覆盖
 
         // --- 1. 输入验证 ---
@@ -261,9 +261,9 @@ public:
 
         // --- 8. D2H 结果下载 ---
         d_final_mask.download(mask);
-        std::chrono::steady_clock::time_point time_EndPreIMU = std::chrono::steady_clock::now();
-        double timePreImu = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndPreIMU - time_StartPreIMU).count();
-        std::cout << "timeOPtflow = " << timePreImu << std::endl;
+        // std::chrono::steady_clock::time_point time_EndPreIMU = std::chrono::steady_clock::now();
+        // double timePreImu = std::chrono::duration_cast<std::chrono::duration<double,std::milli> >(time_EndPreIMU - time_StartPreIMU).count();
+        // std::cout << "timeOPtflow = " << timePreImu << std::endl;
     }
 
     static cv::Mat& getMask() {

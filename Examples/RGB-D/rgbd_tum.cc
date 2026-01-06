@@ -148,7 +148,7 @@ int main(int argc, char **argv)
     PointCloudMapping::PointCloud::Ptr finalMap = SLAM.GetPointCloudMap();
     
     // 使用PCL库函数保存点云
-    pcl::io::savePCDFileBinary("final_static_map.pcd", *finalMap);
+    pcl::io::savePCDFileBinary(string(argv[5]) + "final_static_map.pcd", *finalMap);
     
     return 0;
 }

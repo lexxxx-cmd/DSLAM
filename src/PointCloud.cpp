@@ -35,7 +35,7 @@ PointCloudMapping::PointCloudMapping(double resolution, double blurThreshold, in
    // mPrimaryOctree->setClampingThresholds(min_log_odds, max_log_odds); 
     mSecondaryOctree = std::make_unique<octomap::OcTree>(mResolution);
    // mSecondaryOctree->setClampingThresholds(min_log_odds, max_log_odds);  
-    mVoxelGridFilter.setLeafSize(mResolution, mResolution, mResolution);
+    mVoxelGridFilter.setLeafSize(mResolution*0.2, mResolution*0.2, mResolution*0.2);
 
     // 启动内部处理线程
     mMappingThread = std::thread(&PointCloudMapping::run, this);

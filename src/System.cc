@@ -228,8 +228,8 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     mpLoopCloser = new LoopClosing(mpAtlas, mpKeyFrameDatabase, mpVocabulary, mSensor!=MONOCULAR, activeLC); // mSensor!=MONOCULAR);
     mptLoopClosing = new thread(&ORB_SLAM3::LoopClosing::Run, mpLoopCloser);
 
-    double resolution = 0.01;
-    double blur_threshold = 400.0;
+    double resolution = 0.05;
+    double blur_threshold = 100.0;
     int batch_size = 10;
     mpPointCloudMapper = new PointCloudMapping(resolution, blur_threshold, batch_size);
 
